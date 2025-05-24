@@ -1,0 +1,18 @@
+{
+  "name": "lex-main",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "client": "npm run start --prefix client",
+    "server": "npm run server --prefix server",
+    "db": "mongod --dbpath=./dataBase --port 27017",
+    "dev": "concurrently \"npm run client\" \"npm run server\" \"npm run db\""
+  },
+  "keywords": [],
+  "author": "sibragimov999@gmail.com",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
