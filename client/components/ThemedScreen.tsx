@@ -28,6 +28,7 @@ const styles = StyleSheet.create({
   },
   titleContainer: {
     backgroundColor: "transparent",
+    flex: 1,
   },
 });
 

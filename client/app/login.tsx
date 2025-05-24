@@ -72,7 +72,9 @@ export default function LoginScreen() {
 
         <Text style={styles.registerText}>
           Don't have an account?{" "}
-          <Text style={{ color: colors.accent, fontWeight: "bold" }}>
+          <Text
+            style={{ color: colors.accent, fontWeight: "bold" }}
+            onPress={() => router.push("/register")}>
             Register
           </Text>
         </Text>
