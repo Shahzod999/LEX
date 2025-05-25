@@ -15,6 +15,7 @@ import ThemedButton from "@/components/ThemedButton";
 import BottomModal from "../Modal/BottomModal";
 import Title from "./Title";
 import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
 
 interface RegistrationFormProps {
   onSubmit: (data: {
@@ -157,13 +158,19 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ onSubmit }) => {
           onChangeText={setNationality}
         />
       </View>
-
-      <ThemedButton
-        title="Next Step"
-        onPress={() => setStep(2)}
-        disabled={!isStep1Valid}
-        style={styles.button}
-      />
+      <View style={styles.buttonContainer}>
+        <ThemedButton
+          title="Back"
+          onPress={() => router.back()}
+          variant="secondary"
+        />
+        <ThemedButton
+          title="Next Step"
+          onPress={() => setStep(2)}
+          disabled={!isStep1Valid}
+          style={styles.button}
+        />
+      </View>
     </>
   );
 
@@ -248,7 +255,6 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ onSubmit }) => {
         <ThemedButton
           title="Back"
           onPress={() => setStep(1)}
-          style={styles.secondaryButton}
           variant="secondary"
         />
         <ThemedButton
@@ -307,7 +313,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   button: {
-    marginTop: 20,
+    flex: 1,
   },
   datePicker: {
     height: 200,
@@ -320,11 +326,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     gap: 10,
-  },
-  secondaryButton: {
     marginTop: 20,
-    backgroundColor: "transparent",
   },
+
   passwordContainer: {
     position: "relative",
   },

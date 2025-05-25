@@ -12,13 +12,11 @@ import {
   Modal,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useAuth } from "../context/AuthContext";
 import { useMenu } from "../context/MenuContext";
 import { useTheme } from "../context/ThemeContext";
 import { router } from "expo-router";
 
 export default function SlideMenu() {
-  const { logout } = useAuth();
   const { menuVisible, hideMenu } = useMenu();
   const { isDarkMode, toggleTheme, colors } = useTheme();
   const [notifications, setNotifications] = useState(true);
@@ -81,7 +79,6 @@ export default function SlideMenu() {
 
   const handleLogout = () => {
     hideMenu();
-    logout();
   };
 
   const navigateTo = (route: string) => {

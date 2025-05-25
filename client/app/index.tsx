@@ -1,35 +1,47 @@
 import { useEffect, useContext, useState } from "react";
 import { useRouter } from "expo-router";
-import { AuthContext } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { View, ActivityIndicator } from "react-native";
+import { useAppDispatch, useAppSelector } from "@/hooks/reduxHooks";
+import { getTokenFromSecureStore } from "@/utils/secureStore";
+import { selectToken, setToken } from "@/redux/features/tokenSlice";
 
 export default function Index() {
-  const { isAuthenticated } = useContext(AuthContext);
-  const { colors } = useTheme();
   const router = useRouter();
-  const [isReady, setIsReady] = useState(false);
+  const dispatch = useAppDispatch();
+  const { colors } = useTheme();
+  const [isLoading, setIsLoading] = useState(true);
+  const token = useAppSelector(selectToken);
 
   useEffect(() => {
-    // Подождём 1 рендер, чтобы убедиться, что всё смонтировано
-    setTimeout(() => setIsReady(true), 0);
+    const loadToken = async () => {
+      const token = await getTokenFromSecureStore();
+      if (token) {
+        dispatch(setToken(token));
+      }
+      setIsLoading(false);
+    };
+    loadToken();
   }, []);
 
   useEffect(() => {
-    if (isReady && isAuthenticated) {
-      router.replace("/(tabs)");
-    } else if (isReady && !isAuthenticated) {
-      router.replace("/login");
+    if (!isLoading) {
+      if (token) {
+        router.replace("/(tabs)");
+      } else {
+        router.replace("/login");
+      }
     }
-  }, [isReady, isAuthenticated]);
+  }, [isLoading, token]);
 
   return (
-    <View style={{ 
-      flex: 1, 
-      justifyContent: "center", 
-      alignItems: "center",
-      backgroundColor: colors.background
-    }}>
+    <View
+      style={{
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
+        backgroundColor: colors.background,
+      }}>
       <ActivityIndicator size="large" color={colors.accent} />
     </View>
   );

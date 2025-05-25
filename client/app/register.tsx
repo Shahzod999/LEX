@@ -4,10 +4,9 @@ import ThemedScreen from "@/components/ThemedScreen";
 import LanguagePicker from "@/components/Register/LanguagePicker";
 import RegistrationForm from "@/components/Register/RegistrationForm";
 import ThemedButton from "@/components/ThemedButton";
-import { useTheme } from "@/context/ThemeContext";
+import { router } from "expo-router";
 
 const RegisterScreen = () => {
-  const { colors } = useTheme();
   const [selectedLanguage, setSelectedLanguage] = useState<
     string | undefined
   >();
@@ -49,12 +48,19 @@ const RegisterScreen = () => {
             selectedLanguage={selectedLanguage}
             onLanguageSelect={handleLanguageSelect}
           />
-          <ThemedButton
-            title="Continue"
-            onPress={handleContinue}
-            disabled={!selectedLanguage}
-            style={styles.button}
-          />
+          <View style={styles.buttonContainer}>
+            <ThemedButton
+              title="Back"
+              onPress={() => router.back()}
+              variant="secondary"
+            />
+            <ThemedButton
+              title="Continue"
+              onPress={handleContinue}
+              disabled={!selectedLanguage}
+              style={styles.button}
+            />
+          </View>
         </View>
       ) : (
         <View style={styles.container}>
@@ -71,6 +77,12 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   button: {
+    flex: 1,
+  },
+  buttonContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 10,
     marginTop: 20,
   },
 });

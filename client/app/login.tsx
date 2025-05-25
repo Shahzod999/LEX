@@ -1,26 +1,32 @@
 import { useState, useContext } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { useRouter } from "expo-router";
-import { AuthContext } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import ThemedButton from "../components/ThemedButton";
+import { useLoginMutation } from "@/redux/api/endpoints/authApiSlice";
 
 export default function LoginScreen() {
+  const [login, { isLoading }] = useLoginMutation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const { login } = useContext(AuthContext);
   const { isDarkMode, colors } = useTheme();
   const router = useRouter();
 
-  const handleLogin = () => {
-    setLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-      login();
-      router.replace("/(tabs)");
-      setLoading(false);
-    }, 1000);
+  const handleLogin = async () => {
+    console.log({
+      email,
+      password,
+    });
+
+    try {
+      const response = await login({
+        email,
+        password,
+      }).unwrap();
+      console.log(response);
+    } catch (error) {
+      console.error("Error logging in:", error);
+    }
   };
 
   return (
@@ -64,7 +70,7 @@ export default function LoginScreen() {
         <ThemedButton
           title="Login"
           onPress={handleLogin}
-          loading={loading}
+          loading={false}
           icon="log-in-outline"
           iconPosition="right"
           style={{ marginTop: 15 }}
