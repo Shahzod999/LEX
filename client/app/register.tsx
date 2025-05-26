@@ -10,7 +10,7 @@ const RegisterScreen = () => {
   const [selectedLanguage, setSelectedLanguage] = useState<
     string | undefined
   >();
-  const [step, setStep] = useState<"language" | "details">("language");
+  const [step, setStep] = useState<number>(0);
   const [registrationData, setRegistrationData] = useState<{
     dateOfBirth: Date;
     phoneNumber: string;
@@ -23,7 +23,7 @@ const RegisterScreen = () => {
 
   const handleContinue = () => {
     if (selectedLanguage) {
-      setStep("details");
+      setStep(1);
     }
   };
 
@@ -38,22 +38,19 @@ const RegisterScreen = () => {
       language: selectedLanguage,
       ...data,
     });
+    router.replace("/(tabs)");
   };
 
   return (
     <ThemedScreen>
-      {step === "language" ? (
+      {step === 0 ? (
         <View style={styles.container}>
           <LanguagePicker
             selectedLanguage={selectedLanguage}
             onLanguageSelect={handleLanguageSelect}
           />
           <View style={styles.buttonContainer}>
-            <ThemedButton
-              title="Back"
-              onPress={() => router.back()}
-              variant="secondary"
-            />
+            <ThemedButton title="Login" onPress={() => router.back()} />
             <ThemedButton
               title="Continue"
               onPress={handleContinue}
@@ -64,7 +61,11 @@ const RegisterScreen = () => {
         </View>
       ) : (
         <View style={styles.container}>
-          <RegistrationForm onSubmit={handleRegistrationSubmit} />
+          <RegistrationForm
+            onSubmit={handleRegistrationSubmit}
+            setStep={setStep}
+            step={step}
+          />
         </View>
       )}
     </ThemedScreen>

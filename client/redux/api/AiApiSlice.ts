@@ -10,6 +10,7 @@ const baseQuery = fetchBaseQuery({
 });
 
 export const AiApiSlice = createApi({
+  reducerPath: "aiApi",
   baseQuery,
   tagTypes: [],
   endpoints: () => ({}),

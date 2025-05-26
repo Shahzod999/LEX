@@ -2,7 +2,7 @@ import { fetchBaseQuery, createApi } from "@reduxjs/toolkit/query/react";
 import { RootState } from "../store";
 
 const baseQuery = fetchBaseQuery({
-  baseUrl: "http://localhost:3000/api",
+  baseUrl: "https://gxfl20sh-3000.euw.devtunnels.ms/api",
   prepareHeaders: (headers, { getState }) => {
     const token = (getState() as RootState).token.token;
     if (token) {
@@ -13,7 +13,8 @@ const baseQuery = fetchBaseQuery({
 });
 
 export const apiSlice = createApi({
+  reducerPath: "api",
   baseQuery,
-  tagTypes: [""],
+  tagTypes: [],
   endpoints: () => ({}),
 });

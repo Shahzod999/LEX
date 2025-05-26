@@ -22,7 +22,7 @@ router
   .post("/register", validateUser, createUser)
   .get("/", authenticate, isAdmin, getUsers) // Только админы
   .get("/profile", authenticate, getUserProfile)
-  .put("/:id", authenticate, isOwnerOrAdmin, updateUser)
+  .put("/", authenticate, isOwnerOrAdmin, updateUser)
   .delete("/:id", authenticate, isOwnerOrAdmin, deleteUser);
 
 export default router;

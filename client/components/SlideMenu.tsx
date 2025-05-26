@@ -15,8 +15,15 @@ import { Ionicons } from "@expo/vector-icons";
 import { useMenu } from "../context/MenuContext";
 import { useTheme } from "../context/ThemeContext";
 import { router } from "expo-router";
+import {
+  getTokenFromSecureStore,
+  removeTokenFromSecureStore,
+} from "@/utils/secureStore";
+import { selectToken, setToken, clearToken } from "@/redux/features/tokenSlice";
+import { useAppDispatch, useAppSelector } from "@/hooks/reduxHooks";
 
 export default function SlideMenu() {
+  const dispatch = useAppDispatch();
   const { menuVisible, hideMenu } = useMenu();
   const { isDarkMode, toggleTheme, colors } = useTheme();
   const [notifications, setNotifications] = useState(true);
@@ -77,8 +84,11 @@ export default function SlideMenu() {
     }
   }, [menuVisible, slideAnim, fadeAnim]);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     hideMenu();
+    await removeTokenFromSecureStore();
+    dispatch(clearToken());
+    router.replace("/login");
   };
 
   const navigateTo = (route: string) => {

@@ -143,42 +143,53 @@ export const updateUser = asyncHandler(
       language,
     } = req.body;
 
-    const user = await User.findById(req.params?.id);
-    if (!user) {
+    const existingUser = await User.findById(req.user?.userId);
+
+    if (!existingUser) {
       throw new Error("User not found");
     }
 
-    if (user) {
-      user.name = name || user.name;
-      user.email = email || user.email;
-      user.profilePicture = profilePicture || user.profilePicture;
-      user.bio = bio || user.bio;
-      user.dateOfBirth = dateOfBirth || user.dateOfBirth;
-      user.phoneNumber = phoneNumber || user.phoneNumber;
-      user.nationality = nationality || user.nationality;
-      user.language = language || user.language;
+    if (existingUser) {
+      existingUser.name = name || existingUser.name;
+      existingUser.email = email || existingUser.email;
+      existingUser.profilePicture =
+        profilePicture || existingUser.profilePicture;
+      existingUser.bio = bio || existingUser.bio;
+      existingUser.dateOfBirth = dateOfBirth || existingUser.dateOfBirth;
+      existingUser.phoneNumber = phoneNumber || existingUser.phoneNumber;
+      existingUser.nationality = nationality || existingUser.nationality;
+      existingUser.language = language || existingUser.language;
 
       if (password) {
         if (oldPassword) {
           const isPasswordValid = await bycript.compare(
             oldPassword,
-            user.password
+            existingUser.password
           );
           if (!isPasswordValid) {
             throw new Error("Invalid old password");
           }
           const newPassword = await bycript.hash(password, 10);
-          user.password = newPassword;
+          existingUser.password = newPassword;
         } else {
           throw new Error("Old password is required");
         }
       }
 
-      const updatedUser = await user.save();
+      if (email || email !== existingUser.email) {
+        const emailTaken = await User.findOne({ email });
+        if (emailTaken) {
+          throw new Error("Email taken by another user");
+        }
+      }
+
+      const updatedUser = await existingUser.save();
+      const { password: _, ...user } = updatedUser.toObject();
+
       res.status(200).json({
         status: "success",
         data: {
-          updatedUser,
+          user,
         },
       });
     } else {

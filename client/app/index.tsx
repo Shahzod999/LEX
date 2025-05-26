@@ -29,7 +29,7 @@ export default function Index() {
       if (token) {
         router.replace("/(tabs)");
       } else {
-        router.replace("/login");
+        router.replace("/register");
       }
     }
   }, [isLoading, token]);

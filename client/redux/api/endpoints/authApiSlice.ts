@@ -1,10 +1,18 @@
 import { saveTokenToSecureStore } from "@/utils/secureStore";
 import { apiSlice } from "../apiSlice";
 import { setToken } from "@/redux/features/tokenSlice";
+import {
+  LoginResponseType,
+  ProfileType,
+  ProfileResponseType,
+} from "@/types/login";
 
 export const authApiSlice = apiSlice.injectEndpoints({
   endpoints: (builder) => ({
-    login: builder.mutation({
+    login: builder.mutation<
+      LoginResponseType,
+      { email: string; password: string }
+    >({
       query: (credentials) => ({
         url: "/users/login",
         method: "POST",
@@ -13,6 +21,8 @@ export const authApiSlice = apiSlice.injectEndpoints({
       async onQueryStarted(_, { dispatch, queryFulfilled }) {
         try {
           const { data } = await queryFulfilled;
+          console.log(data);
+
           await saveTokenToSecureStore(data.token);
           dispatch(setToken(data.token));
         } catch (error) {
@@ -37,7 +47,26 @@ export const authApiSlice = apiSlice.injectEndpoints({
         }
       },
     }),
+
+    getProfile: builder.query<ProfileResponseType, void>({
+      query: () => ({
+        url: "/users/profile",
+      }),
+    }),
+
+    updateProfile: builder.mutation<ProfileResponseType, ProfileType>({
+      query: (credentials) => ({
+        url: "/users/profile",
+        method: "PUT",
+        body: credentials,
+      }),
+    }),
   }),
 });
 
-export const { useLoginMutation, useRegisterMutation } = authApiSlice;
+export const {
+  useLoginMutation,
+  useRegisterMutation,
+  useGetProfileQuery,
+  useUpdateProfileMutation,
+} = authApiSlice;

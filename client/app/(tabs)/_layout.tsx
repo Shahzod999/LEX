@@ -4,10 +4,25 @@ import { Text, View, TouchableOpacity } from "react-native";
 import { useMenu } from "../../context/MenuContext";
 import { useTheme } from "../../context/ThemeContext";
 import SlideMenu from "../../components/SlideMenu";
+import { useEffect } from "react";
+import { useRouter } from "expo-router";
+import { useAppSelector } from "@/hooks/reduxHooks";
+import { selectToken } from "@/redux/features/tokenSlice";
 
 export default function TabsLayout() {
   const { toggleMenu } = useMenu();
   const { isDarkMode, colors } = useTheme();
+  const router = useRouter();
+  const token = useAppSelector(selectToken);
+
+  useEffect(() => {
+    if (!token) {
+      router.replace("/login");
+    }
+    if (token) {
+      router.replace("/(tabs)");
+    }
+  }, [token]);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>

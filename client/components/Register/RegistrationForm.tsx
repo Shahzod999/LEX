@@ -27,11 +27,16 @@ interface RegistrationFormProps {
     password: string;
     bio: string;
   }) => void;
+  setStep: (step: number) => void;
+  step: number;
 }
 
-const RegistrationForm: React.FC<RegistrationFormProps> = ({ onSubmit }) => {
+const RegistrationForm: React.FC<RegistrationFormProps> = ({
+  onSubmit,
+  setStep,
+  step,
+}) => {
   const { colors } = useTheme();
-  const [step, setStep] = useState(1);
   const [dateOfBirth, setDateOfBirth] = useState<Date>(new Date());
   const [phoneNumber, setPhoneNumber] = useState("");
   const [nationality, setNationality] = useState("");
@@ -161,7 +166,7 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ onSubmit }) => {
       <View style={styles.buttonContainer}>
         <ThemedButton
           title="Back"
-          onPress={() => router.back()}
+          onPress={() => setStep(0)}
           variant="secondary"
         />
         <ThemedButton
@@ -281,8 +286,8 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ onSubmit }) => {
                 : "Create your account credentials"
             }
           />
-
-          {step === 1 ? renderStep1() : renderStep2()}
+          {step === 1 && renderStep1()}
+          {step === 2 && renderStep2()}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

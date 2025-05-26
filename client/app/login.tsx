@@ -1,5 +1,12 @@
 import { useState, useContext } from "react";
-import { StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { useRouter } from "expo-router";
 import { useTheme } from "../context/ThemeContext";
 import ThemedButton from "../components/ThemedButton";
@@ -10,6 +17,7 @@ export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const { isDarkMode, colors } = useTheme();
+  const [error, setError] = useState("");
   const router = useRouter();
 
   const handleLogin = async () => {
@@ -24,67 +32,76 @@ export default function LoginScreen() {
         password,
       }).unwrap();
       console.log(response);
+      router.replace("/(tabs)");
     } catch (error) {
       console.error("Error logging in:", error);
+      setError("Invalid email or password");
     }
   };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.loginContainer, { backgroundColor: colors.card }]}>
-        <Text style={[styles.title, { color: colors.text }]}>Login</Text>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ width: "90%" }}>
+        <View style={[styles.loginContainer, { backgroundColor: colors.card }]}>
+          {error && (
+            <Text style={{ color: "red", textAlign: "center" }}>{error}</Text>
+          )}
+          <Text style={[styles.title, { color: colors.text }]}>Login</Text>
 
-        <TextInput
-          style={[
-            styles.input,
-            {
-              borderColor: isDarkMode ? "#4A4A4A" : "#ddd",
-              color: colors.text,
-              backgroundColor: isDarkMode ? "#2A2E38" : "white",
-            },
-          ]}
-          placeholder="Email"
-          placeholderTextColor={isDarkMode ? "#AAAAAA" : "#999999"}
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-        />
+          <TextInput
+            style={[
+              styles.input,
+              {
+                borderColor: isDarkMode ? "#4A4A4A" : "#ddd",
+                color: colors.text,
+                backgroundColor: isDarkMode ? "#2A2E38" : "white",
+              },
+            ]}
+            placeholder="Email"
+            placeholderTextColor={isDarkMode ? "#AAAAAA" : "#999999"}
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+          />
 
-        <TextInput
-          style={[
-            styles.input,
-            {
-              borderColor: isDarkMode ? "#4A4A4A" : "#ddd",
-              color: colors.text,
-              backgroundColor: isDarkMode ? "#2A2E38" : "white",
-            },
-          ]}
-          placeholder="Password"
-          placeholderTextColor={isDarkMode ? "#AAAAAA" : "#999999"}
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-        />
+          <TextInput
+            style={[
+              styles.input,
+              {
+                borderColor: isDarkMode ? "#4A4A4A" : "#ddd",
+                color: colors.text,
+                backgroundColor: isDarkMode ? "#2A2E38" : "white",
+              },
+            ]}
+            placeholder="Password"
+            placeholderTextColor={isDarkMode ? "#AAAAAA" : "#999999"}
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+          />
 
-        <ThemedButton
-          title="Login"
-          onPress={handleLogin}
-          loading={false}
-          icon="log-in-outline"
-          iconPosition="right"
-          style={{ marginTop: 15 }}
-        />
+          <ThemedButton
+            title="Login"
+            onPress={handleLogin}
+            loading={isLoading}
+            icon="log-in-outline"
+            iconPosition="right"
+            style={{ marginTop: 15 }}
+          />
 
-        <Text style={styles.registerText}>
-          Don't have an account?{" "}
-          <Text
-            style={{ color: colors.accent, fontWeight: "bold" }}
-            onPress={() => router.push("/register")}>
-            Register
+          <Text style={styles.registerText}>
+            Don't have an account?{" "}
+            <Text
+              style={{ color: colors.accent, fontWeight: "bold" }}
+              onPress={() => router.push("/register")}>
+              Register
+            </Text>
           </Text>
-        </Text>
-      </View>
+        </View>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -96,7 +113,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   loginContainer: {
-    width: "80%",
     borderRadius: 10,
     padding: 20,
     shadowColor: "#000",
