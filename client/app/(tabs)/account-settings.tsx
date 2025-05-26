@@ -153,15 +153,21 @@ export default function AccountSettings() {
             </Text>
           </ThemedCard>
 
-          <ThemedCard>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              Personal Information
-            </Text>
+          <ThemedCard style={styles.infoCard}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="person-circle-outline" size={24} color={colors.accent} />
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                Personal Information
+              </Text>
+            </View>
 
             <View style={styles.formGroup}>
-              <Text style={[styles.label, { color: colors.hint }]}>
-                Full Name
-              </Text>
+              <View style={styles.labelContainer}>
+                <Ionicons name="person-outline" size={20} color={colors.hint} />
+                <Text style={[styles.label, { color: colors.hint }]}>
+                  Full Name
+                </Text>
+              </View>
               <TextInput
                 style={[
                   styles.input,
@@ -177,7 +183,10 @@ export default function AccountSettings() {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={[styles.label, { color: colors.hint }]}>Email</Text>
+              <View style={styles.labelContainer}>
+                <Ionicons name="mail-outline" size={20} color={colors.hint} />
+                <Text style={[styles.label, { color: colors.hint }]}>Email</Text>
+              </View>
               <TextInput
                 style={[
                   styles.input,
@@ -195,9 +204,12 @@ export default function AccountSettings() {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={[styles.label, { color: colors.hint }]}>
-                Phone Number
-              </Text>
+              <View style={styles.labelContainer}>
+                <Ionicons name="call-outline" size={20} color={colors.hint} />
+                <Text style={[styles.label, { color: colors.hint }]}>
+                  Phone Number
+                </Text>
+              </View>
               <TextInput
                 style={[
                   styles.input,
@@ -214,9 +226,12 @@ export default function AccountSettings() {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={[styles.label, { color: colors.hint }]}>
-                Nationality
-              </Text>
+              <View style={styles.labelContainer}>
+                <Ionicons name="globe-outline" size={20} color={colors.hint} />
+                <Text style={[styles.label, { color: colors.hint }]}>
+                  Nationality
+                </Text>
+              </View>
               <TextInput
                 style={[
                   styles.input,
@@ -232,9 +247,12 @@ export default function AccountSettings() {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={[styles.label, { color: colors.hint }]}>
-                Date of Birth
-              </Text>
+              <View style={styles.labelContainer}>
+                <Ionicons name="calendar-outline" size={20} color={colors.hint} />
+                <Text style={[styles.label, { color: colors.hint }]}>
+                  Date of Birth
+                </Text>
+              </View>
               <TouchableOpacity
                 style={[
                   styles.input,
@@ -279,9 +297,12 @@ export default function AccountSettings() {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={[styles.label, { color: colors.hint }]}>
-                About Me
-              </Text>
+              <View style={styles.labelContainer}>
+                <Ionicons name="chatbubble-outline" size={20} color={colors.hint} />
+                <Text style={[styles.label, { color: colors.hint }]}>
+                  About Me
+                </Text>
+              </View>
               <TextInput
                 style={[
                   styles.input,
@@ -305,18 +326,25 @@ export default function AccountSettings() {
               onPress={handleSubmit}
               loading={isLoading}
               style={styles.button}
+              icon="save-outline"
             />
           </ThemedCard>
 
-          <ThemedCard>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              Change Password
-            </Text>
+          <ThemedCard style={styles.infoCard}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="lock-closed-outline" size={24} color={colors.accent} />
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                Change Password
+              </Text>
+            </View>
 
             <View style={styles.formGroup}>
-              <Text style={[styles.label, { color: colors.hint }]}>
-                Current Password
-              </Text>
+              <View style={styles.labelContainer}>
+                <Ionicons name="key-outline" size={20} color={colors.hint} />
+                <Text style={[styles.label, { color: colors.hint }]}>
+                  Current Password
+                </Text>
+              </View>
               <View style={styles.passwordContainer}>
                 <TextInput
                   style={[
@@ -345,9 +373,12 @@ export default function AccountSettings() {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={[styles.label, { color: colors.hint }]}>
-                New Password
-              </Text>
+              <View style={styles.labelContainer}>
+                <Ionicons name="key-outline" size={20} color={colors.hint} />
+                <Text style={[styles.label, { color: colors.hint }]}>
+                  New Password
+                </Text>
+              </View>
               <View style={styles.passwordContainer}>
                 <TextInput
                   style={[
@@ -371,6 +402,7 @@ export default function AccountSettings() {
               onPress={handlePasswordChange}
               loading={isLoading}
               style={styles.button}
+              icon="key-outline"
             />
           </ThemedCard>
         </View>
@@ -419,19 +451,32 @@ const styles = StyleSheet.create({
   email: {
     fontSize: 16,
   },
-
+  infoCard: {
+    marginTop: 16,
+    padding: 20,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
   sectionTitle: {
     fontSize: 20,
     fontWeight: "600",
-    marginBottom: 16,
+    marginLeft: 12,
   },
   formGroup: {
     marginBottom: 20,
   },
+  labelContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
   label: {
     fontSize: 16,
-    marginBottom: 8,
     fontWeight: "500",
+    marginLeft: 8,
   },
   input: {
     height: 50,
