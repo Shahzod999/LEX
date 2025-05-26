@@ -2,6 +2,7 @@ import express from "express";
 import {
   deleteUploads,
   getAllUploaded,
+  getUploadedByRoute,
   uploadImg,
 } from "../controllers/uploadImgController";
 import { authenticate } from "../middleware/userMiddleware";
@@ -17,5 +18,7 @@ router.get("/", authenticate, getAllUploaded);
 
 // Route for deleting an image
 router.delete("/delete", authenticate, deleteUploads);
+
+router.get("/:userId/:type/:filename", authenticate, getUploadedByRoute);
 
 export default router;

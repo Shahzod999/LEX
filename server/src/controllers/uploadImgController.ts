@@ -177,3 +177,22 @@ export const deleteUploads = asyncHandler(
     }
   }
 );
+
+export const getUploadedByRoute = asyncHandler(
+  async (req: AuthenticatedRequest, res: Response) => {
+    const { userId, type, filename } = req.params;
+
+    // 🔐 Проверка: пользователь может получить доступ только к своей папке
+    if (req.user?.userId !== userId) {
+      throw new Error("Access denied");
+    }
+    const filePath = path.join("uploads", userId, type, filename);
+
+    // Проверка: существует ли файл
+    if (!fs.existsSync(filePath)) {
+      throw new Error("File not found");
+    }
+
+    res.sendFile(path.resolve(filePath));
+  }
+);

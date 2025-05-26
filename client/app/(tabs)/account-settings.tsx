@@ -21,6 +21,7 @@ import { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import BottomModal from "@/components/Modal/BottomModal";
+import { getValidatedUrl } from "@/utils/ValidateImg";
 
 export default function AccountSettings() {
   const { colors } = useTheme();
@@ -125,7 +126,12 @@ export default function AccountSettings() {
               style={styles.imageContainer}>
               {profile?.data.user.profilePicture ? (
                 <Image
-                  source={{ uri: profile.data.user.profilePicture }}
+                  source={{
+                    uri: getValidatedUrl(
+                      profile.data.user._id,
+                      profile.data.user.profilePicture
+                    ),
+                  }}
                   style={styles.profileImage}
                 />
               ) : (
@@ -155,7 +161,11 @@ export default function AccountSettings() {
 
           <ThemedCard style={styles.infoCard}>
             <View style={styles.sectionHeader}>
-              <Ionicons name="person-circle-outline" size={24} color={colors.accent} />
+              <Ionicons
+                name="person-circle-outline"
+                size={24}
+                color={colors.accent}
+              />
               <Text style={[styles.sectionTitle, { color: colors.text }]}>
                 Personal Information
               </Text>
@@ -185,7 +195,9 @@ export default function AccountSettings() {
             <View style={styles.formGroup}>
               <View style={styles.labelContainer}>
                 <Ionicons name="mail-outline" size={20} color={colors.hint} />
-                <Text style={[styles.label, { color: colors.hint }]}>Email</Text>
+                <Text style={[styles.label, { color: colors.hint }]}>
+                  Email
+                </Text>
               </View>
               <TextInput
                 style={[
@@ -248,7 +260,11 @@ export default function AccountSettings() {
 
             <View style={styles.formGroup}>
               <View style={styles.labelContainer}>
-                <Ionicons name="calendar-outline" size={20} color={colors.hint} />
+                <Ionicons
+                  name="calendar-outline"
+                  size={20}
+                  color={colors.hint}
+                />
                 <Text style={[styles.label, { color: colors.hint }]}>
                   Date of Birth
                 </Text>
@@ -298,7 +314,11 @@ export default function AccountSettings() {
 
             <View style={styles.formGroup}>
               <View style={styles.labelContainer}>
-                <Ionicons name="chatbubble-outline" size={20} color={colors.hint} />
+                <Ionicons
+                  name="chatbubble-outline"
+                  size={20}
+                  color={colors.hint}
+                />
                 <Text style={[styles.label, { color: colors.hint }]}>
                   About Me
                 </Text>
@@ -332,7 +352,11 @@ export default function AccountSettings() {
 
           <ThemedCard style={styles.infoCard}>
             <View style={styles.sectionHeader}>
-              <Ionicons name="lock-closed-outline" size={24} color={colors.accent} />
+              <Ionicons
+                name="lock-closed-outline"
+                size={24}
+                color={colors.accent}
+              />
               <Text style={[styles.sectionTitle, { color: colors.text }]}>
                 Change Password
               </Text>
@@ -456,8 +480,8 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 20,
   },
   sectionTitle: {
@@ -469,8 +493,8 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   labelContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 8,
   },
   label: {

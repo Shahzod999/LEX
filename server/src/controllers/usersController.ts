@@ -176,7 +176,7 @@ export const updateUser = asyncHandler(
         }
       }
 
-      if (email || email !== existingUser.email) {
+      if (email && email !== existingUser.email) {
         const emailTaken = await User.findOne({ email });
         if (emailTaken) {
           throw new Error("Email taken by another user");

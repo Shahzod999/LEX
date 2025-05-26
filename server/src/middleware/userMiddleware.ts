@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 import asyncHandler from "./asyncHandler";
 import jwt from "jsonwebtoken";
 import { AuthenticatedRequest } from "../types/RequestTypes";
+import User from "../models/User";
 
 // Middleware to check if the user is an admin
 export const isAdmin = asyncHandler(
@@ -73,6 +74,13 @@ export const authenticate = asyncHandler(
           userId: decode.userId,
           role: decode.role,
         };
+
+        const userExists = await User.findById(decode.userId);
+        if (!userExists) {
+          res.status(401);
+          throw new Error("User not found");
+        }
+
         next();
       } catch (error) {
         res.status(401);
