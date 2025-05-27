@@ -13,65 +13,37 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@/context/ThemeContext";
+import {
+  useDeleteChatMutation,
+  useGetUserChatsQuery,
+} from "@/redux/api/endpoints/chatApiSlice";
+import { ChatHistoryType } from "@/types/chat";
+import { formatDate } from "@/utils/formatDate";
+import { Loading } from "./LoadingScreen";
+import { Swipeable } from "react-native-gesture-handler";
 
 const { width: screenWidth } = Dimensions.get("window");
-
-interface ChatHistoryItem {
-  id: string;
-  title: string;
-  lastMessage: string;
-  timestamp: string;
-}
 
 interface ChatHistoryMenuProps {
   visible: boolean;
   onClose: () => void;
   onSelectChat?: (chatId: string) => void;
+  onCreateNewChat?: () => void;
 }
 
 export default function ChatHistoryMenu({
   visible,
   onClose,
   onSelectChat,
+  onCreateNewChat,
 }: ChatHistoryMenuProps) {
   const { colors } = useTheme();
   const [isVisible, setIsVisible] = useState(visible);
   const menuWidth = screenWidth * 0.85;
   const slideAnim = useRef(new Animated.Value(-menuWidth)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
-
-  const [chatHistory] = useState<ChatHistoryItem[]>([
-    {
-      id: "1",
-      title: "Visa Application Help",
-      lastMessage: "Thank you for the information about work permits...",
-      timestamp: "2 hours ago",
-    },
-    {
-      id: "2",
-      title: "Immigration Questions",
-      lastMessage: "What documents do I need for...",
-      timestamp: "Yesterday",
-    },
-    {
-      id: "3",
-      title: "Legal Translation",
-      lastMessage: "I need help translating my documents...",
-      timestamp: "3 days ago",
-    },
-    {
-      id: "4",
-      title: "Court Procedures",
-      lastMessage: "Can you explain the court process...",
-      timestamp: "1 week ago",
-    },
-    {
-      id: "5",
-      title: "Work Permit Issues",
-      lastMessage: "My work permit was denied...",
-      timestamp: "2 weeks ago",
-    },
-  ]);
+  const { data: chatHistory, isLoading } = useGetUserChatsQuery();
+  const [deleteChat, { isLoading: isDeleting }] = useDeleteChatMutation();
 
   useEffect(() => {
     if (visible) {
@@ -109,35 +81,56 @@ export default function ChatHistoryMenu({
     onClose();
   };
 
-  const renderChatItem = ({ item }: { item: ChatHistoryItem }) => (
+  const handleCreateNewChat = () => {
+    onCreateNewChat?.();
+    onClose();
+  };
+
+  const handleDeleteChat = async (chatId: string) => {
+    try {
+      await deleteChat(chatId).unwrap();
+    } catch (error) {
+      console.error("Error deleting chat:", error);
+    }
+  };
+  const renderRightActions = (chatId: string) => (
     <TouchableOpacity
-      style={[styles.chatItem, { backgroundColor: colors.card }]}
-      onPress={() => handleSelectChat(item.id)}
-      activeOpacity={0.7}>
-      <View
-        style={[
-          styles.chatItemIcon,
-          { backgroundColor: colors.accent + "20" },
-        ]}>
-        <Ionicons name="chatbubble-outline" size={20} color={colors.accent} />
-      </View>
-      <View style={styles.chatItemContent}>
-        <Text
-          style={[styles.chatTitle, { color: colors.text }]}
-          numberOfLines={1}>
-          {item.title}
-        </Text>
-        <Text
-          style={[styles.lastMessage, { color: colors.hint }]}
-          numberOfLines={2}>
-          {item.lastMessage}
-        </Text>
-        <Text style={[styles.timestamp, { color: colors.hint }]}>
-          {item.timestamp}
-        </Text>
-      </View>
-      <Ionicons name="chevron-forward" size={16} color={colors.hint} />
+      style={styles.deleteButton}
+      onPress={() => handleDeleteChat(chatId)}>
+      <Ionicons name="trash" size={24} color="#9b67f5" />
     </TouchableOpacity>
+  );
+  const renderChatItem = ({ item }: { item: ChatHistoryType }) => (
+    <Swipeable renderRightActions={() => renderRightActions(item._id)}>
+      <TouchableOpacity
+        style={[styles.chatItem, { backgroundColor: colors.card }]}
+        onPress={() => handleSelectChat(item._id)}
+        activeOpacity={0.7}>
+        <View
+          style={[
+            styles.chatItemIcon,
+            { backgroundColor: colors.accent + "20" },
+          ]}>
+          <Ionicons name="chatbubble-outline" size={16} color={colors.accent} />
+        </View>
+        <View style={styles.chatItemContent}>
+          <Text
+            style={[styles.chatTitle, { color: colors.text }]}
+            numberOfLines={1}>
+            {item.title}
+          </Text>
+          <Text
+            style={[styles.lastMessage, { color: colors.hint }]}
+            numberOfLines={2}>
+            {item?.messages[item?.messages?.length - 1]?.content}
+          </Text>
+          <Text style={[styles.timestamp, { color: colors.hint }]}>
+            {formatDate(item.createdAt, "ru-RU")}
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={16} color={colors.hint} />
+      </TouchableOpacity>
+    </Swipeable>
   );
 
   if (!visible && !isVisible) return null;
@@ -149,6 +142,7 @@ export default function ChatHistoryMenu({
       animationType="none"
       onRequestClose={onClose}>
       <View style={styles.modalContainer}>
+        {(isLoading || isDeleting) && <Loading />}
         <TouchableWithoutFeedback onPress={onClose}>
           <Animated.View
             style={[
@@ -191,7 +185,7 @@ export default function ChatHistoryMenu({
                     Chat History
                   </Text>
                   <Text style={[styles.headerSubtitle, { color: colors.hint }]}>
-                    {chatHistory.length} conversations
+                    {chatHistory?.length} conversations
                   </Text>
                 </View>
               </View>
@@ -205,7 +199,7 @@ export default function ChatHistoryMenu({
             {/* New Chat Button */}
             <TouchableOpacity
               style={[styles.newChatButton, { backgroundColor: colors.accent }]}
-              onPress={onClose}
+              onPress={handleCreateNewChat}
               activeOpacity={0.8}>
               <Ionicons name="add" size={20} color="white" />
               <Text style={styles.newChatText}>New Conversation</Text>
@@ -215,7 +209,7 @@ export default function ChatHistoryMenu({
             <FlatList
               data={chatHistory}
               renderItem={renderChatItem}
-              keyExtractor={(item) => item.id}
+              keyExtractor={(item) => item._id}
               style={styles.chatList}
               contentContainerStyle={styles.listContent}
               showsVerticalScrollIndicator={false}
@@ -323,12 +317,12 @@ const styles = StyleSheet.create({
     marginVertical: 4,
   },
   chatItemIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 30,
+    height: 30,
+    borderRadius: 50,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 12,
+    marginRight: 8,
   },
   chatItemContent: {
     flex: 1,
@@ -350,5 +344,10 @@ const styles = StyleSheet.create({
   separator: {
     height: StyleSheet.hairlineWidth,
     marginHorizontal: 16,
+  },
+  deleteButton: {
+    padding: 22,
+    justifyContent: "center",
+    alignItems: "center",
   },
 });

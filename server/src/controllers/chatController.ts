@@ -4,6 +4,7 @@ import type { Response } from "express";
 import { Chat, Message } from "../models/Chat";
 import OpenAI from "openai";
 
+
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
@@ -147,3 +148,5 @@ export const deleteUserChat = asyncHandler(
       .json({ message: "Chat and associated messages deleted successfully" });
   }
 );
+
+

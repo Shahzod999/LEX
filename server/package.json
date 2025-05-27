@@ -31,13 +31,15 @@
     "npm": "^11.4.0",
     "openai": "^4.100.0",
     "pdf-parse": "^1.1.1",
-    "tesseract.js": "^6.0.1"
+    "tesseract.js": "^6.0.1",
+    "ws": "^8.18.2"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.8",
     "@types/cors": "^2.8.18",
     "@types/jsonwebtoken": "^9.0.9",
     "@types/node": "^22.15.18",
-    "@types/pdf-parse": "^1.1.5"
+    "@types/pdf-parse": "^1.1.5",
+    "@types/ws": "^8.18.1"
   }
 }

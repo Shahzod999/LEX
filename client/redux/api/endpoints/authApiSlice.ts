@@ -26,8 +26,8 @@ export const authApiSlice = apiSlice.injectEndpoints({
           const { data } = await queryFulfilled;
           console.log(data);
 
-          await saveTokenToSecureStore(data.token);
           dispatch(setToken(data.token));
+          await saveTokenToSecureStore(data.token);
         } catch (error) {
           console.error("Error saving token:", error);
         }
@@ -43,8 +43,8 @@ export const authApiSlice = apiSlice.injectEndpoints({
       async onQueryStarted(_, { dispatch, queryFulfilled }) {
         try {
           const { data } = await queryFulfilled;
-          await saveTokenToSecureStore(data.token);
           dispatch(setToken(data.token));
+          await saveTokenToSecureStore(data.token);
         } catch (error) {
           console.error("Error saving token:", error);
         }

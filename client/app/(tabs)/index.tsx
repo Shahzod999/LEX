@@ -6,9 +6,11 @@ import Header from "@/components/Card/Header";
 import Emergency from "@/components/Home/Emergency";
 import { useRouter } from "expo-router";
 import Quotes from "@/components/Quotes";
+
 export default function HomeScreen() {
   const { colors } = useTheme();
   const router = useRouter();
+
   return (
     <ThemedScreen>
       <ScrollView

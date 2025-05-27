@@ -26,11 +26,12 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import BottomModal from "@/components/Modal/BottomModal";
 import { getValidatedUrl } from "@/utils/ValidateImg";
 import { useUploadImageMutation } from "@/redux/api/endpoints/uploadApi";
+import { Loading } from "@/components/LoadingScreen";
 
 export default function AccountSettings() {
   const { colors } = useTheme();
   const { showSuccess, showError } = useToast();
-  const { data: profile } = useGetProfileQuery();
+  const { data: profile, isLoading: isProfileLoading } = useGetProfileQuery();
   const [updateProfile, { isLoading }] = useUpdateProfileMutation();
   const [uploadImage, { isLoading: isUploading }] = useUploadImageMutation();
 
@@ -165,12 +166,20 @@ export default function AccountSettings() {
         ...prev,
         name: profile.data.user.name,
         email: profile.data.user.email,
+        phoneNumber: profile.data.user.phoneNumber,
+        nationality: profile.data.user.nationality,
+        language: profile.data.user.language,
+        dateOfBirth: profile.data.user.dateOfBirth
+          ? new Date(profile.data.user.dateOfBirth)
+          : new Date(),
+        bio: profile.data.user.bio,
       }));
     }
   }, [profile]);
 
   return (
     <ThemedScreen>
+      {isProfileLoading && <Loading />}
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === "ios" ? "padding" : "height"}>

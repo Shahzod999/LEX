@@ -1,10 +1,10 @@
 import { useEffect, useContext, useState } from "react";
 import { useRouter } from "expo-router";
 import { useTheme } from "../context/ThemeContext";
-import { View, ActivityIndicator } from "react-native";
 import { useAppDispatch, useAppSelector } from "@/hooks/reduxHooks";
 import { getTokenFromSecureStore } from "@/utils/secureStore";
 import { selectToken, setToken } from "@/redux/features/tokenSlice";
+import LoadingScreen from "@/components/LoadingScreen";
 
 export default function Index() {
   const router = useRouter();
@@ -34,15 +34,5 @@ export default function Index() {
     }
   }, [isLoading, token]);
 
-  return (
-    <View
-      style={{
-        flex: 1,
-        justifyContent: "center",
-        alignItems: "center",
-        backgroundColor: colors.background,
-      }}>
-      <ActivityIndicator size="large" color={colors.accent} />
-    </View>
-  );
+  return <LoadingScreen />;
 }

@@ -16,6 +16,10 @@ const RegisterScreen = () => {
     dateOfBirth: string;
     phoneNumber: string;
     nationality: string;
+    name: string;
+    email: string;
+    password: string;
+    bio: string;
   } | null>(null);
 
   const [register, { isLoading }] = useRegisterMutation();
@@ -34,19 +38,28 @@ const RegisterScreen = () => {
     dateOfBirth: string;
     phoneNumber: string;
     nationality: string;
+    name: string;
+    email: string;
+    password: string;
+    bio: string;
   }) => {
     setRegistrationData(data);
-    // Here you would typically send the data to your backend
-    console.log("Registration data:", {
-      language: selectedLanguage,
-      ...data,
-    });
 
-    await register({
-      selectedLanguage,
-      ...data,
-    });
-    router.replace("/(tabs)");
+    try {
+      console.log("Registration data:", {
+        language: selectedLanguage,
+        ...data,
+      });
+
+      await register({
+        language: selectedLanguage,
+        ...data,
+      }).unwrap();
+
+      router.replace("/(tabs)");
+    } catch (error) {
+      console.error("Registration error:", error);
+    }
   };
 
   return (

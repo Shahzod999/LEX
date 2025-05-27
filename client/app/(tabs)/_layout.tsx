@@ -4,22 +4,36 @@ import { Text, View, TouchableOpacity } from "react-native";
 import { useMenu } from "../../context/MenuContext";
 import { useTheme } from "../../context/ThemeContext";
 import SlideMenu from "../../components/SlideMenu";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "expo-router";
 import { useAppSelector } from "@/hooks/reduxHooks";
 import { selectToken } from "@/redux/features/tokenSlice";
+import { getTokenFromSecureStore } from "@/utils/secureStore";
+import LoadingScreen from "@/components/LoadingScreen";
 
 export default function TabsLayout() {
   const { toggleMenu } = useMenu();
   const { isDarkMode, colors } = useTheme();
   const router = useRouter();
   const token = useAppSelector(selectToken);
+  const [checkingToken, setCheckingToken] = useState(true);
 
   useEffect(() => {
-    if (!token) {
-      router.replace("/login");
+    if (token) {
+      setCheckingToken(false);
+    } else {
+      getTokenFromSecureStore().then((storedToken) => {
+        if (!storedToken) {
+          router.replace("/login");
+        }
+        setCheckingToken(false);
+      });
     }
   }, [token]);
+
+  if (checkingToken) {
+    return <LoadingScreen />;
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
