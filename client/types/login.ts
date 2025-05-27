@@ -34,3 +34,16 @@ export interface ProfileType {
   oldPassword?: string;
   password?: string;
 }
+
+export interface UpdateProfileType {
+  name?: string;
+  email?: string;
+  bio?: string;
+  oldPassword?: string;
+  password?: string;
+  dateOfBirth?: string;
+  phoneNumber?: string;
+  nationality?: string;
+  language?: string;
+  profilePicture?: string;
+}

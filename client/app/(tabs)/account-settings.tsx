@@ -7,9 +7,12 @@ import {
   TextInput,
   StyleSheet,
   Platform,
+  ActivityIndicator,
+  KeyboardAvoidingView,
 } from "react-native";
 import ThemedScreen from "../../components/ThemedScreen";
 import { useTheme } from "../../context/ThemeContext";
+import { useToast } from "../../context/ToastContext";
 import {
   useGetProfileQuery,
   useUpdateProfileMutation,
@@ -17,16 +20,19 @@ import {
 import ThemedButton from "@/components/ThemedButton";
 import ThemedCard from "@/components/ThemedCard";
 import * as ImagePicker from "expo-image-picker";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import BottomModal from "@/components/Modal/BottomModal";
 import { getValidatedUrl } from "@/utils/ValidateImg";
+import { useUploadImageMutation } from "@/redux/api/endpoints/uploadApi";
 
 export default function AccountSettings() {
   const { colors } = useTheme();
+  const { showSuccess, showError } = useToast();
   const { data: profile } = useGetProfileQuery();
   const [updateProfile, { isLoading }] = useUpdateProfileMutation();
+  const [uploadImage, { isLoading: isUploading }] = useUploadImageMutation();
 
   const [formData, setFormData] = useState({
     name: profile?.data.user.name || "",
@@ -48,6 +54,25 @@ export default function AccountSettings() {
     password: "",
   });
 
+  const uploadImg = async (imageUri: string) => {
+    const formData = new FormData();
+    formData.append("file", {
+      uri: imageUri,
+      type: "image/jpeg",
+      name: "profile-image.jpg",
+    } as unknown as File);
+    formData.append("type", "logo");
+
+    try {
+      const response = await uploadImage(formData);
+      return response.data?.filePath;
+    } catch (error) {
+      console.error("Error uploading image:", error);
+      showError("Ошибка при загрузке изображения");
+      throw error;
+    }
+  };
+
   const handleImagePick = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -58,11 +83,26 @@ export default function AccountSettings() {
       });
 
       if (!result.canceled && result.assets?.[0]?.uri && profile?.data.user) {
-        // Update profile with new image
-        await updateProfile({
-          ...profile.data.user,
-          profilePicture: result.assets[0].uri,
-        });
+        try {
+          const res = await uploadImg(result.assets[0].uri);
+
+          if (!res) {
+            throw new Error("Failed to upload image");
+          }
+
+          const updateResult = await updateProfile({
+            profilePicture: res,
+          }).unwrap();
+
+          if (!updateResult) {
+            throw new Error("Failed to update profile");
+          }
+
+          showSuccess("Фото профиля успешно обновлено");
+        } catch (error) {
+          console.error("Error updating profile picture:", error);
+          showError("Ошибка при обновлении фото профиля");
+        }
       }
     } catch (error) {
       console.error("Error picking image:", error);
@@ -94,10 +134,12 @@ export default function AccountSettings() {
           ...profile.data.user,
           ...formData,
           dateOfBirth: formData.dateOfBirth.toISOString(),
-        });
+        }).unwrap();
+        showSuccess("Профиль успешно обновлен");
       }
     } catch (error) {
       console.error("Error updating profile:", error);
+      showError("Ошибка при обновлении профиля");
     }
   };
 
@@ -105,25 +147,46 @@ export default function AccountSettings() {
     try {
       if (profile?.data.user) {
         await updateProfile({
-          ...profile.data.user,
           oldPassword: passwordData.oldPassword,
           password: passwordData.password,
-        });
+        }).unwrap();
         setPasswordData({ oldPassword: "", password: "" });
+        showSuccess("Пароль успешно изменен");
       }
     } catch (error) {
       console.error("Error changing password:", error);
+      showError("Ошибка при изменении пароля");
     }
   };
 
+  useEffect(() => {
+    if (profile?.data.user) {
+      setFormData((prev) => ({
+        ...prev,
+        name: profile.data.user.name,
+        email: profile.data.user.email,
+      }));
+    }
+  }, [profile]);
+
   return (
     <ThemedScreen>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <View style={styles.container}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}>
+        <ScrollView showsVerticalScrollIndicator={false}>
           <ThemedCard style={styles.profileCard}>
             <TouchableOpacity
+              disabled={isUploading || isLoading}
               onPress={handleImagePick}
               style={styles.imageContainer}>
+              {(isUploading || isLoading) && (
+                <ActivityIndicator
+                  style={styles.loadingIndicator}
+                  color={colors.accent}
+                  size="large"
+                />
+              )}
               {profile?.data.user.profilePicture ? (
                 <Image
                   source={{
@@ -378,7 +441,10 @@ export default function AccountSettings() {
                   ]}
                   value={passwordData.oldPassword}
                   onChangeText={(text) =>
-                    setPasswordData((prev) => ({ ...prev, oldPassword: text }))
+                    setPasswordData((prev) => ({
+                      ...prev,
+                      oldPassword: text,
+                    }))
                   }
                   placeholder="Enter current password"
                   placeholderTextColor={colors.hint}
@@ -429,8 +495,8 @@ export default function AccountSettings() {
               icon="key-outline"
             />
           </ThemedCard>
-        </View>
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </ThemedScreen>
   );
 }
@@ -440,9 +506,17 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 16,
   },
+  loadingIndicator: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 9999,
+  },
   profileCard: {
     alignItems: "center",
-    paddingVertical: 24,
+    paddingVertical: 16,
   },
   imageContainer: {
     position: "relative",
@@ -476,7 +550,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   infoCard: {
-    marginTop: 16,
     padding: 20,
   },
   sectionHeader: {

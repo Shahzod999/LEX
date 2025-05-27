@@ -5,6 +5,7 @@ import LanguagePicker from "@/components/Register/LanguagePicker";
 import RegistrationForm from "@/components/Register/RegistrationForm";
 import ThemedButton from "@/components/ThemedButton";
 import { router } from "expo-router";
+import { useRegisterMutation } from "@/redux/api/endpoints/authApiSlice";
 
 const RegisterScreen = () => {
   const [selectedLanguage, setSelectedLanguage] = useState<
@@ -12,10 +13,12 @@ const RegisterScreen = () => {
   >();
   const [step, setStep] = useState<number>(0);
   const [registrationData, setRegistrationData] = useState<{
-    dateOfBirth: Date;
+    dateOfBirth: string;
     phoneNumber: string;
     nationality: string;
   } | null>(null);
+
+  const [register, { isLoading }] = useRegisterMutation();
 
   const handleLanguageSelect = (lang: string) => {
     setSelectedLanguage(lang);
@@ -27,8 +30,8 @@ const RegisterScreen = () => {
     }
   };
 
-  const handleRegistrationSubmit = (data: {
-    dateOfBirth: Date;
+  const handleRegistrationSubmit = async (data: {
+    dateOfBirth: string;
     phoneNumber: string;
     nationality: string;
   }) => {
@@ -36,6 +39,11 @@ const RegisterScreen = () => {
     // Here you would typically send the data to your backend
     console.log("Registration data:", {
       language: selectedLanguage,
+      ...data,
+    });
+
+    await register({
+      selectedLanguage,
       ...data,
     });
     router.replace("/(tabs)");
@@ -65,6 +73,7 @@ const RegisterScreen = () => {
             onSubmit={handleRegistrationSubmit}
             setStep={setStep}
             step={step}
+            isLoading={isLoading}
           />
         </View>
       )}

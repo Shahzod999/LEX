@@ -3,11 +3,12 @@ import { apiSlice } from "../apiSlice";
 import { setToken } from "@/redux/features/tokenSlice";
 import {
   LoginResponseType,
-  ProfileType,
   ProfileResponseType,
+  UpdateProfileType,
 } from "@/types/login";
 
 export const authApiSlice = apiSlice.injectEndpoints({
+  overrideExisting: true,
   endpoints: (builder) => ({
     login: builder.mutation<
       LoginResponseType,
@@ -52,14 +53,16 @@ export const authApiSlice = apiSlice.injectEndpoints({
       query: () => ({
         url: "/users/profile",
       }),
+      providesTags: ["Profile"],
     }),
 
-    updateProfile: builder.mutation<ProfileResponseType, ProfileType>({
+    updateProfile: builder.mutation<ProfileResponseType, UpdateProfileType>({
       query: (credentials) => ({
-        url: "/users/profile",
+        url: "/users",
         method: "PUT",
         body: credentials,
       }),
+      invalidatesTags: ["Profile"],
     }),
   }),
 });

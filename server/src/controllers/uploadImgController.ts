@@ -10,12 +10,13 @@ interface FileInfo {
   size: number;
   createdAt: Date;
   lastModified: Date;
-  type: "image" | "document";
+  type: "image" | "document" | "logo";
 }
 
 interface UploadResult {
   images: FileInfo[];
   documents: FileInfo[];
+  logo: FileInfo[];
 }
 
 export const uploadImg = asyncHandler(
@@ -31,19 +32,24 @@ export const uploadImg = asyncHandler(
     }
 
     const { type } = req.body;
-    if (!type || !["docs", "image"].includes(type)) {
+    if (!type || !["docs", "images", "logo"].includes(type)) {
       res.status(400);
-      throw new Error("Type must be either 'docs' or 'image'");
+      throw new Error("Type must be either 'docs' or 'images' or 'logo'");
     }
 
     // Create user-specific directory
-    const userDir = path.join(
-      "uploads",
-      req.user.userId.toString(),
-      type === "image" ? "images" : "docs"
-    );
+    const userDir = path.join("uploads", req.user.userId.toString(), type);
     if (!fs.existsSync(userDir)) {
       fs.mkdirSync(userDir, { recursive: true });
+    }
+
+    // If type is logo, delete all existing files in the logo directory
+    if (type === "logo" && fs.existsSync(userDir)) {
+      const existingFiles = fs.readdirSync(userDir);
+      existingFiles.forEach((file) => {
+        const filePath = path.join(userDir, file);
+        fs.unlinkSync(filePath);
+      });
     }
 
     // Generate unique filename
@@ -55,7 +61,7 @@ export const uploadImg = asyncHandler(
 
     res.status(201).json({
       success: true,
-      filePath: `/${type === "image" ? "images" : "docs"}/${newFileName}`,
+      filePath: `/${type}/${newFileName}`,
       fileName: newFileName,
     });
   }
@@ -72,10 +78,12 @@ export const getAllUploaded = asyncHandler(
     const userBaseDir = path.join("uploads", userId);
     const userImagesDir = path.join(userBaseDir, "images");
     const userDocsDir = path.join(userBaseDir, "docs");
+    const userLogoDir = path.join(userBaseDir, "logo");
 
     const result: UploadResult = {
       images: [],
       documents: [],
+      logo: [],
     };
 
     try {
@@ -88,7 +96,7 @@ export const getAllUploaded = asyncHandler(
 
           return {
             fileName,
-            filePath,
+            filePath: `/images/${fileName}`,
             size: stats.size,
             createdAt: stats.birthtime,
             lastModified: stats.mtime,
@@ -106,11 +114,28 @@ export const getAllUploaded = asyncHandler(
 
           return {
             fileName,
-            filePath,
+            filePath: `/docs/${fileName}`,
             size: stats.size,
             createdAt: stats.birthtime,
             lastModified: stats.mtime,
             type: "document" as const,
+          };
+        });
+      }
+
+      if (fs.existsSync(userLogoDir)) {
+        const logoFiles = fs.readdirSync(userLogoDir);
+        result.logo = logoFiles.map((fileName) => {
+          const filePath = path.join(userLogoDir, fileName);
+          const stats = fs.statSync(filePath);
+
+          return {
+            fileName,
+            filePath: `/logo/${fileName}`,
+            size: stats.size,
+            createdAt: stats.birthtime,
+            lastModified: stats.mtime,
+            type: "logo" as const,
           };
         });
       }
@@ -196,3 +221,18 @@ export const getUploadedByRoute = asyncHandler(
     res.sendFile(path.resolve(filePath));
   }
 );
+
+// Публичный доступ к логотипам без аутентификации
+export const getPublicLogo = asyncHandler(async (req: any, res: Response) => {
+  const { userId, filename } = req.params;
+
+  const filePath = path.join("uploads", userId, "logo", filename);
+
+  // Проверка: существует ли файл
+  if (!fs.existsSync(filePath)) {
+    res.status(404);
+    throw new Error("File not found");
+  }
+
+  res.sendFile(path.resolve(filePath));
+});

@@ -8,10 +8,12 @@ export function createUserDirectory(userId: Types.ObjectId) {
   const userDir = path.join(rootDir, "uploads", id);
   const docsDir = path.join(userDir, "docs");
   const imagesDir = path.join(userDir, "images");
+  const logoDir = path.join(userDir, "logo");
 
   if (!fs.existsSync(userDir)) {
     fs.mkdirSync(userDir, { recursive: true });
     fs.mkdirSync(docsDir);
     fs.mkdirSync(imagesDir);
+    fs.mkdirSync(logoDir);
   }
 }

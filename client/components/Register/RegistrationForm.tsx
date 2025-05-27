@@ -19,7 +19,7 @@ import { router } from "expo-router";
 
 interface RegistrationFormProps {
   onSubmit: (data: {
-    dateOfBirth: Date;
+    dateOfBirth: string;
     phoneNumber: string;
     nationality: string;
     name: string;
@@ -29,15 +29,17 @@ interface RegistrationFormProps {
   }) => void;
   setStep: (step: number) => void;
   step: number;
+  isLoading: boolean;
 }
 
 const RegistrationForm: React.FC<RegistrationFormProps> = ({
   onSubmit,
   setStep,
   step,
+  isLoading,
 }) => {
   const { colors } = useTheme();
-  const [dateOfBirth, setDateOfBirth] = useState<Date>(new Date());
+  const [dateOfBirth, setDateOfBirth] = useState(new Date());
   const [phoneNumber, setPhoneNumber] = useState("");
   const [nationality, setNationality] = useState("");
   const [name, setName] = useState("");
@@ -45,12 +47,12 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({
   const [password, setPassword] = useState("");
   const [bio, setBio] = useState("");
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [tempDate, setTempDate] = useState<Date>(new Date());
+  const [tempDate, setTempDate] = useState(new Date());
   const [showPassword, setShowPassword] = useState(false);
 
   const handleSubmit = () => {
     onSubmit({
-      dateOfBirth,
+      dateOfBirth: dateOfBirth.toLocaleDateString("en-US"),
       phoneNumber,
       nationality,
       name,
@@ -60,7 +62,7 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({
     });
   };
 
-  const onDateChange = (event: any, selectedDate?: Date) => {
+  const onDateChange = (_event: any, selectedDate?: Date) => {
     if (Platform.OS === "android") {
       setShowDatePicker(false);
       if (selectedDate) {
@@ -102,9 +104,7 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({
             setTempDate(dateOfBirth);
             setShowDatePicker(true);
           }}>
-          <Text style={{ color: colors.text }}>
-            {dateOfBirth.toLocaleDateString()}
-          </Text>
+          <Text style={{ color: colors.text }}>{dateOfBirth.toLocaleDateString("en-US")}</Text>
         </TouchableOpacity>
 
         {Platform.OS === "ios" ? (
@@ -267,6 +267,7 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({
           onPress={handleSubmit}
           disabled={!isStep2Valid}
           style={styles.button}
+          loading={isLoading}
         />
       </View>
     </>

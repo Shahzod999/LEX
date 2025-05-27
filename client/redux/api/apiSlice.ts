@@ -15,6 +15,6 @@ const baseQuery = fetchBaseQuery({
 export const apiSlice = createApi({
   reducerPath: "api",
   baseQuery,
-  tagTypes: [],
+  tagTypes: ["Profile"],
   endpoints: () => ({}),
 });
