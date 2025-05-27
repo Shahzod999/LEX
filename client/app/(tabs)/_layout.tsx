@@ -19,9 +19,6 @@ export default function TabsLayout() {
     if (!token) {
       router.replace("/login");
     }
-    if (token) {
-      router.replace("/(tabs)");
-    }
   }, [token]);
 
   return (

@@ -7,13 +7,15 @@ import {
   UpdateProfileType,
 } from "@/types/login";
 
+interface LoginCredentials {
+  email: string;
+  password: string;
+}
+
 export const authApiSlice = apiSlice.injectEndpoints({
   overrideExisting: true,
   endpoints: (builder) => ({
-    login: builder.mutation<
-      LoginResponseType,
-      { email: string; password: string }
-    >({
+    login: builder.mutation<LoginResponseType, LoginCredentials>({
       query: (credentials) => ({
         url: "/users/login",
         method: "POST",
@@ -64,6 +66,13 @@ export const authApiSlice = apiSlice.injectEndpoints({
       }),
       invalidatesTags: ["Profile"],
     }),
+
+    deleteProfile: builder.mutation({
+      query: (userId) => ({
+        url: `/users/${userId}`,
+        method: "DELETE",
+      }),
+    }),
   }),
 });
 
@@ -72,4 +81,5 @@ export const {
   useRegisterMutation,
   useGetProfileQuery,
   useUpdateProfileMutation,
+  useDeleteProfileMutation,
 } = authApiSlice;

@@ -516,12 +516,7 @@ const ScanScreen = () => {
         {scannedImage && !isAnalyzing && (
           <KeyboardAvoidingView
             behavior={Platform.OS === "ios" ? "padding" : "height"}
-            style={[
-              styles.inputContainer,
-              {
-                borderColor: colors.border,
-              },
-            ]}>
+            style={styles.inputContainer}>
             <View
               style={[
                 styles.inputWrapper,
@@ -529,7 +524,7 @@ const ScanScreen = () => {
               ]}>
               <TextInput
                 style={[styles.input, { color: colors.text }]}
-                placeholder="Ask me anything about scanned document..."
+                placeholder="Your conversations are confidential and protected"
                 placeholderTextColor={colors.hint}
                 value={inputText}
                 onChangeText={setInputText}
@@ -548,9 +543,6 @@ const ScanScreen = () => {
                 />
               </TouchableOpacity>
             </View>
-            <Text style={[styles.disclaimer, { color: colors.hint }]}>
-              Your conversations are confidential and protected
-            </Text>
           </KeyboardAvoidingView>
         )}
       </SafeAreaView>
@@ -563,13 +555,13 @@ export default ScanScreen;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal: 16,
   },
   scanCard: {
     marginVertical: 16,
   },
   chatContent: {
     paddingVertical: 16,
+    paddingHorizontal: 16,
   },
   scanCardContent: {
     minHeight: 300,
@@ -671,21 +663,18 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     width: "100%",
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderRadius: 10,
     marginBottom: 16,
+    paddingHorizontal: 16,
   },
   inputWrapper: {
     flexDirection: "row",
     alignItems: "flex-end",
-    borderRadius: 5,
+    borderRadius: 10,
     paddingHorizontal: 16,
     paddingVertical: 8,
     elevation: 2,
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.5,
     shadowRadius: 2,
   },
   input: {
@@ -698,10 +687,5 @@ const styles = StyleSheet.create({
   sendButton: {
     paddingLeft: 10,
     paddingBottom: 12,
-  },
-  disclaimer: {
-    fontSize: 12,
-    textAlign: "center",
-    marginVertical: 10,
   },
 });

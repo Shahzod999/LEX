@@ -11,7 +11,9 @@ import {
   SafeAreaView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { PanGestureHandler, State } from "react-native-gesture-handler";
 import Header from "@/components/Card/Header";
+import ChatHistoryMenu from "@/components/ChatHistoryMenu";
 import { useTheme } from "@/context/ThemeContext";
 import { useGetOpenAIMutation } from "@/redux/api/endpoints/openAI";
 
@@ -27,6 +29,7 @@ interface Message {
 const ChatScreen = () => {
   const { colors } = useTheme();
   const [inputText, setInputText] = useState("");
+  const [chatHistoryVisible, setChatHistoryVisible] = useState(false);
   const [messageHistory, setMessageHistory] = useState([
     {
       role: "system",
@@ -106,18 +109,43 @@ const ChatScreen = () => {
     // setHelpfulFeedback(isHelpful);
     // You could add logic here to send feedback to your backend
   };
+
+  const handleSwipeGesture = (event: any) => {
+    if (event.nativeEvent.state === State.END) {
+      const { translationX, velocityX } = event.nativeEvent;
+      
+      // Swipe right to open chat history
+      if (translationX > 50 && velocityX > 0) {
+        setChatHistoryVisible(true);
+      }
+    }
+  };
+
+  const handleChatHistoryToggle = () => {
+    setChatHistoryVisible(!chatHistoryVisible);
+  };
+
+  const handleSelectChat = (chatId: string) => {
+    // Here you can load the selected chat history
+    console.log("Selected chat:", chatId);
+    // You can implement logic to load specific chat messages
+  };
+
   console.log(messages);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <SafeAreaView style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={styles.chatContent}>
-          <Header
-            title="Ask Lex - Your Legal Companion"
-            subtitle="Get clear, calm answers to your legal questions"
-          />
-          <View
-            style={[styles.chatContainer, { backgroundColor: colors.card }]}>
+        <PanGestureHandler onHandlerStateChange={handleSwipeGesture}>
+          <View style={{ flex: 1 }}>
+            <ScrollView contentContainerStyle={styles.chatContent}>
+              <Header
+                title="Ask Lex - Your Legal Companion"
+                subtitle="Get clear, calm answers to your legal questions"
+                secondIcon="chatbubbles"
+                secondIconFunction={handleChatHistoryToggle}
+              />
+          <View style={styles.chatContainer}>
             {messages.map((message, index) => (
               <View
                 key={message.id + index}
@@ -125,20 +153,11 @@ const ChatScreen = () => {
                   styles.messageWrapper,
                   !message.isBot && styles.userMessageWrapper,
                 ]}>
-                {message.isBot && (
-                  <View style={styles.avatarContainer}>
-                    <Ionicons
-                      name="shield-half-outline"
-                      size={20}
-                      color={"white"}
-                    />
-                  </View>
-                )}
                 <View
                   style={[
                     styles.messageBubble,
-                    { backgroundColor: colors.background },
-                    !message.isBot && { backgroundColor: colors.accent },
+                    { backgroundColor: colors.card },
+                    !message.isBot && { backgroundColor: colors.userAccent },
                     message.isTyping && { opacity: 0.7 },
                   ]}>
                   <Text style={[styles.messageText, { color: colors.text }]}>
@@ -202,12 +221,7 @@ const ChatScreen = () => {
         </ScrollView>
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={[
-            styles.inputContainer,
-            {
-              borderColor: colors.border,
-            },
-          ]}>
+          style={styles.inputContainer}>
           <View
             style={[
               styles.inputWrapper,
@@ -215,7 +229,7 @@ const ChatScreen = () => {
             ]}>
             <TextInput
               style={[styles.input, { color: colors.text }]}
-              placeholder="Ask me anything about visas or immigration..."
+              placeholder=" Your conversations are confidential and protected"
               placeholderTextColor={colors.hint}
               value={inputText}
               onChangeText={setInputText}
@@ -234,10 +248,15 @@ const ChatScreen = () => {
               />
             </TouchableOpacity>
           </View>
-          <Text style={[styles.disclaimer, { color: colors.hint }]}>
-            Your conversations are confidential and protected
-          </Text>
         </KeyboardAvoidingView>
+          </View>
+        </PanGestureHandler>
+        
+        <ChatHistoryMenu
+          visible={chatHistoryVisible}
+          onClose={() => setChatHistoryVisible(false)}
+          onSelectChat={handleSelectChat}
+        />
       </SafeAreaView>
     </View>
   );
@@ -246,17 +265,16 @@ const ChatScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal: 16,
+    overflow: "hidden",
   },
   chatContainer: {
     flex: 1,
     borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 16,
     marginVertical: 16,
   },
   chatContent: {
     paddingVertical: 16,
+    paddingHorizontal: 16,
   },
   messageWrapper: {
     flexDirection: "row",
@@ -270,13 +288,12 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: "#6200EE",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 10,
   },
   messageBubble: {
-    maxWidth: "80%",
+    maxWidth: "95%",
     borderRadius: 16,
     padding: 16,
     borderBottomLeftRadius: 4,
@@ -306,21 +323,18 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     width: "100%",
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderRadius: 10,
     marginBottom: 16,
+    paddingHorizontal: 16,
   },
   inputWrapper: {
     flexDirection: "row",
     alignItems: "flex-end",
-    borderRadius: 5,
+    borderRadius: 10,
     paddingHorizontal: 16,
     paddingVertical: 8,
     elevation: 2,
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.5,
     shadowRadius: 2,
   },
   input: {
@@ -333,11 +347,6 @@ const styles = StyleSheet.create({
   sendButton: {
     paddingLeft: 10,
     paddingBottom: 12,
-  },
-  disclaimer: {
-    fontSize: 12,
-    textAlign: "center",
-    marginVertical: 10,
   },
 });
 
