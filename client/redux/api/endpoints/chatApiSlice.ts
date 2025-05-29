@@ -14,9 +14,9 @@ export const chatApiSlice = apiSlice.injectEndpoints({
       }),
       providesTags: ["Chat"],
     }),
-    getUserOneChat: builder.query<ChatHistoryType, string>({
+    getUserOneChat: builder.query<ChatHistoryType, string | void>({
       query: (chatId) => ({
-        url: `/chat/${chatId}`,
+        url: `/chat/single/${chatId}`,
       }),
       providesTags: ["Chat"],
     }),

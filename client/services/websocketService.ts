@@ -27,7 +27,6 @@ export class WebSocketChatService {
   private socket: WebSocket | null = null;
   private token: string;
   private chatId: string | null = null;
-  private chatType: "documents" | "messages" = "messages";
   private messageHandlers: Map<string, (data: any) => void> = new Map();
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
@@ -52,8 +51,6 @@ export class WebSocketChatService {
             type: "join_chat",
             data: {
               token: this.token,
-              chatId: this.chatId || undefined,
-              chatType: this.chatType,
             },
           });
           
@@ -101,18 +98,15 @@ export class WebSocketChatService {
         break;
       case "chat_joined":
         this.chatId = response.data.chatId;
-        this.chatType = response.data.chatType || "messages";
-        console.log("Joined chat:", response.data.chatId, "type:", this.chatType);
+        console.log("Joined chat:", response.data.chatId);
         break;
       case "chat_created":
         this.chatId = response.data.chatId;
-        this.chatType = response.data.chatType || "messages";
-        console.log("Chat created:", response.data.chatId, "type:", this.chatType);
+        console.log("Chat created:", response.data.chatId);
         break;
       case "chat_switched":
         this.chatId = response.data.chatId;
-        this.chatType = response.data.chatType || "messages";
-        console.log("Switched to chat:", response.data.chatId, "type:", this.chatType);
+        console.log("Switched to chat:", response.data.chatId);
         break;
       case "error":
         console.error("WebSocket error:", response.data.message);
@@ -133,38 +127,32 @@ export class WebSocketChatService {
     }
   }
 
-  joinChat(chatId: string, chatType: "documents" | "messages" = "messages") {
+  joinChat(chatId: string) {
     this.chatId = chatId;
-    this.chatType = chatType;
     this.send({
       type: "join_chat",
       data: {
         token: this.token,
         chatId,
-        chatType,
       },
     });
   }
 
-  createChat(chatType: "documents" | "messages" = "messages") {
-    this.chatType = chatType;
+  createChat() {
     this.send({
       type: "create_chat",
       data: {
         token: this.token,
-        chatType,
       },
     });
   }
 
-  switchChat(chatId: string, chatType: "documents" | "messages" = "messages") {
+  switchChat(chatId: string) {
     this.chatId = chatId;
-    this.chatType = chatType;
     this.send({
       type: "switch_chat",
       data: {
         chatId,
-        chatType,
       },
     });
   }
@@ -216,10 +204,6 @@ export class WebSocketChatService {
 
   getCurrentChatId(): string | null {
     return this.chatId;
-  }
-
-  getCurrentChatType(): "documents" | "messages" {
-    return this.chatType;
   }
 }
 

@@ -4,7 +4,6 @@ import type { Response } from "express";
 import { Chat, Message } from "../models/Chat";
 import OpenAI from "openai";
 
-
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
@@ -30,15 +29,46 @@ export const getUserChats = asyncHandler(
 // Get a specific chat
 export const getChat = asyncHandler(
   async (req: AuthenticatedRequest, res: Response) => {
-    const chat = await Chat.findOne({
-      _id: req.params.id,
-      userId: req.user?.userId,
-    }).populate("messages");
+    const { id } = req.params;
+    const userId = req.user?.userId;
 
-    if (!chat) {
-      res.status(404);
-      throw new Error("Chat not found");
+
+    const chat = await Chat.findOne({
+      _id: id,
+      userId,
+      sourceType: "manual",
+    })
+      .populate("messages")
+      .exec();
+
+
+    // Если ID не указан, ищем или создаем чат по умолчанию
+    if (!id || !chat) {
+      const defaultChat = await Chat.findOne({
+        userId,
+        sourceType: "manual",
+      })
+        .populate("messages")
+        .sort({ updatedAt: -1 })
+        .exec();
+
+      if (defaultChat) {
+        return res.status(200).json(defaultChat);
+      }
+
+      // Если чат не найден, создаем новый
+      const newChat = await Chat.create({
+        userId,
+        title: "New chat",
+        description: "New conversation",
+        messages: [],
+      });
+
+      return res.status(200).json(newChat);
     }
+
+    // Если ID указан, ищем конкретный чат
+
 
     res.status(200).json(chat);
   }
@@ -148,5 +178,3 @@ export const deleteUserChat = asyncHandler(
       .json({ message: "Chat and associated messages deleted successfully" });
   }
 );
-
-

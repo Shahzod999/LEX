@@ -12,7 +12,7 @@ import {
   SafeAreaView,
   Alert,
 } from "react-native";
-import React, { useState, useCallback } from "react";
+import React, { useEffect, useState } from "react";
 import Header from "@/components/Card/Header";
 import ToggleTabsRN from "@/components/ToggleTabs/ToggleTabsRN";
 import HomeCard from "@/components/Card/HomeCard";
@@ -29,16 +29,6 @@ import {
   useUploadDocumentMutation,
 } from "@/redux/api/endpoints/documentApiSlice";
 import { Loading } from "@/components/LoadingScreen";
-
-// UI message interface
-interface Message {
-  id: string;
-  text: string;
-  isBot: boolean;
-  isTyping?: boolean;
-  messageId?: string;
-  timestamp?: Date;
-}
 
 // Document interface
 interface ScannedDocument {
@@ -66,40 +56,31 @@ const ScanScreen = () => {
     []
   );
   const [inputText, setInputText] = useState("");
-  const [documentIds, setDocumentIds] = useState<string[]>([]);
   const [isAnalyzed, setIsAnalyzed] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string>("");
+  const [documentChatId, setDocumentChatId] = useState<string>("");
 
   const [uploadDocument, { isLoading: isUploading }] =
     useUploadDocumentMutation();
   const [deleteDocument, { isLoading: isDeleting }] =
     useDeleteDocumentMutation();
 
-  // Use the global chat context
-  const {
-    isConnected,
-    isConnecting,
-    documentsChat,
-    sendMessage: sendWebSocketMessage,
-    joinChat,
-  } = useChat();
-
-  // Convert chat messages to UI format
-  const convertToUIMessages = (chatMessages: any[]): Message[] => {
-    return chatMessages.map((msg, index) => ({
-      id: `msg_${Date.now()}_${index}_${Math.random()}`,
-      text: msg.content,
-      isBot: msg.role === "assistant",
-      messageId: msg.messageId,
-      timestamp: msg.timestamp,
-    }));
-  };
+  // Use chat context
+  const { isConnected, isConnecting, currentChat, sendMessage, joinChat } =
+    useChat();
 
   // Get current messages and state for documents chat
-  const currentMessages = convertToUIMessages(documentsChat.messages);
-  const isTyping = documentsChat.isTyping;
-  const streamingMessage = documentsChat.streamingMessage;
-  const currentChatId = documentsChat.chatId;
+  const currentMessages = currentChat.messages || [];
+  const isTyping = currentChat.isTyping;
+  const streamingMessage = currentChat.streamingMessage;
+  const currentChatId = currentChat.chatId;
+
+  // Connect to document chat only when we have a chatId from uploaded document
+  useEffect(() => {
+    if (isConnected && documentChatId && documentChatId !== currentChatId) {
+      joinChat(documentChatId);
+    }
+  }, [isConnected, documentChatId, currentChatId, joinChat]);
 
   const sanitizeFileName = (
     fileName: string,
@@ -121,58 +102,25 @@ const ScanScreen = () => {
     return `${sanitized}_${Date.now()}${extension}`;
   };
 
-  const handleDocumentUpload = async (
-    documentUri: string,
-    documentType: string,
-    fileName?: string
+  // Массовая загрузка документов
+  const handleMultipleDocumentsUpload = async (
+    documents: ScannedDocument[]
   ) => {
-    if (!token) return null;
-
-    try {
-      const formData = new FormData();
-      const sanitizedFileName = sanitizeFileName(
-        fileName || `document_${Date.now()}`
-      );
-
-      formData.append("files", {
-        uri: documentUri,
-        type: documentType,
-        name: sanitizedFileName,
-      } as any);
-
-      formData.append("title", `Document Analysis - ${sanitizedFileName}`);
-      formData.append("language", "Russian");
-
-      const response = await uploadDocument(formData).unwrap();
-
-      if (response.chat?._id && response.document?._id) {
-        // If this is the first document, set up the documents chat
-        if (!currentChatId) {
-          joinChat(response.chat._id, "documents");
-        }
-
-        return response.document._id;
-      }
-      return null;
-    } catch (error) {
-      console.error("Error uploading document:", error);
-      return null;
-    }
-  };
-
-  // Новая функция для массовой загрузки документов
-  const handleMultipleDocumentsUpload = async (documents: ScannedDocument[]) => {
     if (!token || documents.length === 0) return null;
 
     try {
-      setUploadProgress(`Preparing ${documents.length} document(s) for upload...`);
-      
+      setUploadProgress(
+        `Preparing ${documents.length} document(s) for upload...`
+      );
+
       const formData = new FormData();
-      
+
       // Добавляем все файлы в один FormData
       documents.forEach((document, index) => {
-        setUploadProgress(`Processing document ${index + 1} of ${documents.length}...`);
-        
+        setUploadProgress(
+          `Processing document ${index + 1} of ${documents.length}...`
+        );
+
         const sanitizedFileName = sanitizeFileName(
           document.name || `document_${Date.now()}_${index}`
         );
@@ -185,11 +133,11 @@ const ScanScreen = () => {
       });
 
       // Создаем заголовок для множественных документов
-      const documentNames = documents.map(doc => 
-        doc.name || getDocumentTypeName(doc.type)
-      ).join(", ");
-      
-      formData.append("title", `Multiple Documents Analysis - ${documentNames}`);
+      const documentNames = documents
+        .map((doc) => doc.name || getDocumentTypeName(doc.type))
+        .join(", ");
+
+      formData.append("title", `Documents Analysis - ${documentNames}`);
       formData.append("language", "Russian");
 
       setUploadProgress("Uploading and analyzing documents...");
@@ -197,11 +145,7 @@ const ScanScreen = () => {
 
       if (response.chat?._id && response.document?._id) {
         setUploadProgress("Connecting to chat...");
-        
-        // Подключаемся к чату с документами
-        if (!currentChatId) {
-          joinChat(response.chat._id, "documents");
-        }
+        setDocumentChatId(response.chat._id);
 
         setUploadProgress("Upload completed successfully!");
         setTimeout(() => setUploadProgress(""), 2000);
@@ -209,7 +153,7 @@ const ScanScreen = () => {
         return {
           documentId: response.document._id,
           chatId: response.chat._id,
-          filesUrl: response.document.filesUrl || []
+          filesUrl: response.document.filesUrl || [],
         };
       }
       return null;
@@ -222,7 +166,6 @@ const ScanScreen = () => {
   };
 
   const addDocument = (uri: string, type: string, name?: string) => {
-    // Use a combination of timestamp and counter for unique IDs
     documentCounter += 1;
     const newDocument: ScannedDocument = {
       id: `doc_${Date.now()}_${documentCounter}`,
@@ -239,28 +182,25 @@ const ScanScreen = () => {
 
     try {
       // Фильтруем документы, которые еще не загружены
-      const documentsToUpload = scannedDocuments.filter(doc => !doc.documentId);
-      
+      const documentsToUpload = scannedDocuments.filter(
+        (doc) => !doc.documentId
+      );
+
       if (documentsToUpload.length > 0) {
         // Загружаем все документы одновременно
-        const uploadResult = await handleMultipleDocumentsUpload(documentsToUpload);
-        
+        const uploadResult = await handleMultipleDocumentsUpload(
+          documentsToUpload
+        );
+
         if (uploadResult) {
-          // Обновляем все документы с одним documentId (так как они все в одном документе)
-          const updatedDocuments = scannedDocuments.map(doc => ({
+          // Обновляем все документы с одним documentId
+          const updatedDocuments = scannedDocuments.map((doc) => ({
             ...doc,
-            documentId: uploadResult.documentId
+            documentId: uploadResult.documentId,
           }));
-          
+
           setScannedDocuments(updatedDocuments);
-          setDocumentIds([uploadResult.documentId]);
         }
-      } else {
-        // Если все документы уже загружены, просто используем существующие ID
-        const existingIds = scannedDocuments
-          .map(doc => doc.documentId)
-          .filter(Boolean) as string[];
-        setDocumentIds(existingIds);
       }
 
       setIsAnalyzed(true);
@@ -318,32 +258,31 @@ const ScanScreen = () => {
     }
   };
 
-  const handlePhotoTaken = async (uri: string) => {
+  const handlePhotoTaken = (uri: string) => {
     if (uri) {
-      // Close camera immediately after photo is taken
       setShowCamera(false);
-
       const sanitizedFileName = sanitizeFileName(`scanned_${Date.now()}.jpg`);
       addDocument(uri, "image/jpeg", sanitizedFileName);
     }
   };
 
   const handleSendMessage = () => {
-    if (inputText.trim() === "" || !isConnected || !currentChatId) return;
+    if (inputText.trim() === "" || !isConnected || !documentChatId) return;
 
-    // Send message to documents chat
-    sendWebSocketMessage(inputText, "documents");
+    // Send message to current active documents chat
+    sendMessage(inputText);
     setInputText("");
   };
 
   const handleDeleteDocument = async (documentToDelete: ScannedDocument) => {
     // Удаляем документ из локального состояния
-    const updatedDocuments = scannedDocuments.filter((doc) => doc.id !== documentToDelete.id);
+    const updatedDocuments = scannedDocuments.filter(
+      (doc) => doc.id !== documentToDelete.id
+    );
     setScannedDocuments(updatedDocuments);
 
     // Если это был последний документ, сбрасываем состояние
     if (updatedDocuments.length === 0) {
-      // Удаляем документ с сервера, если он был загружен
       if (documentToDelete.documentId) {
         try {
           await deleteDocument(documentToDelete.documentId).unwrap();
@@ -351,20 +290,19 @@ const ScanScreen = () => {
           console.log("Error deleting document from server:", error);
         }
       }
-      
-      setDocumentIds([]);
+
       setIsAnalyzed(false);
+      setDocumentChatId("");
     } else if (isAnalyzed && documentToDelete.documentId) {
       // Если документ уже был загружен и анализирован, нужно перезагрузить оставшиеся документы
-      // Сбрасываем состояние анализа, чтобы пользователь мог заново загрузить оставшиеся документы
-      const documentsWithoutIds = updatedDocuments.map(doc => ({
+      const documentsWithoutIds = updatedDocuments.map((doc) => ({
         ...doc,
-        documentId: undefined
+        documentId: undefined,
       }));
       setScannedDocuments(documentsWithoutIds);
-      setDocumentIds([]);
       setIsAnalyzed(false);
-      
+      setDocumentChatId("");
+
       // Удаляем старый документ с сервера
       try {
         await deleteDocument(documentToDelete.documentId).unwrap();
@@ -374,7 +312,7 @@ const ScanScreen = () => {
     }
   };
 
-  const handleDeleteAllDocuments = async () => {
+  const handleDeleteAllDocuments = () => {
     Alert.alert(
       "Delete All Documents",
       "Are you sure you want to delete all documents?",
@@ -386,16 +324,16 @@ const ScanScreen = () => {
           onPress: async () => {
             try {
               // Удаляем все документы с сервера
-              for (const docId of documentIds) {
-                if (docId) {
-                  await deleteDocument(docId).unwrap();
+              for (const doc of scannedDocuments) {
+                if (doc.documentId) {
+                  await deleteDocument(doc.documentId).unwrap();
                 }
               }
-              
+
               // Сбрасываем локальное состояние
               setScannedDocuments([]);
-              setDocumentIds([]);
               setIsAnalyzed(false);
+              setDocumentChatId("");
             } catch (error) {
               console.log("Error deleting documents:", error);
             }
@@ -407,8 +345,8 @@ const ScanScreen = () => {
 
   const handleSaveDocuments = () => {
     setScannedDocuments([]);
-    setDocumentIds([]);
     setIsAnalyzed(false);
+    setDocumentChatId("");
   };
 
   const getDocumentIcon = (type: string) => {
@@ -437,10 +375,10 @@ const ScanScreen = () => {
   // Add streaming message if typing
   if (isTyping && streamingMessage) {
     displayMessages.push({
-      id: `typing_${Date.now()}_${Math.random()}`,
-      text: streamingMessage,
-      isBot: true,
-      isTyping: true,
+      messageId: `typing_${Date.now()}`,
+      content: streamingMessage,
+      role: "assistant",
+      timestamp: new Date(),
     });
   }
 
@@ -628,7 +566,11 @@ const ScanScreen = () => {
 
             {/* Upload Progress */}
             {isUploading && uploadProgress && (
-              <View style={[styles.progressContainer, { backgroundColor: colors.card }]}>
+              <View
+                style={[
+                  styles.progressContainer,
+                  { backgroundColor: colors.card },
+                ]}>
                 <Text style={[styles.progressText, { color: colors.accent }]}>
                   {uploadProgress}
                 </Text>
@@ -637,33 +579,32 @@ const ScanScreen = () => {
 
             {/* Chat Messages */}
             {scannedDocuments.length > 0 &&
-              currentChatId &&
+              documentChatId &&
               isConnected &&
               isAnalyzed && (
                 <View style={styles.chatContainer}>
                   <View style={styles.messagesContainer}>
-                    {displayMessages.map((message) => (
+                    {displayMessages.map((message, index) => (
                       <View
-                        key={message.id}
+                        key={message.messageId || index}
                         style={[
                           styles.messageWrapper,
-                          !message.isBot && styles.userMessageWrapper,
+                          message.role === "user" && styles.userMessageWrapper,
                         ]}>
                         <View
                           style={[
                             styles.messageBubble,
                             { backgroundColor: colors.card },
-                            !message.isBot && {
+                            message.role === "user" && {
                               backgroundColor: colors.userAccent,
                             },
-                            message.isTyping && { opacity: 0.7 },
                           ]}>
                           <Text
                             style={[
                               styles.messageText,
                               { color: colors.text },
                             ]}>
-                            {message.text}
+                            {message.content}
                           </Text>
                         </View>
                       </View>
@@ -676,7 +617,7 @@ const ScanScreen = () => {
 
         {/* Input for additional questions */}
         {scannedDocuments.length > 0 &&
-          currentChatId &&
+          documentChatId &&
           !isUploading &&
           isConnected &&
           isAnalyzed && (

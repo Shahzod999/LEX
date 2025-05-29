@@ -90,10 +90,14 @@ export default function ChatHistoryMenu({
   const handleDeleteChat = async (chatId: string) => {
     try {
       await deleteChat(chatId).unwrap();
+      if (chatHistory && chatHistory.length <= 1) {
+        onSelectChat?.("");
+      }
     } catch (error) {
       console.error("Error deleting chat:", error);
     }
   };
+
   const renderRightActions = (chatId: string) => (
     <TouchableOpacity
       style={styles.deleteButton}
@@ -101,6 +105,7 @@ export default function ChatHistoryMenu({
       <Ionicons name="trash" size={24} color="#9b67f5" />
     </TouchableOpacity>
   );
+
   const renderChatItem = ({ item }: { item: ChatHistoryType }) => (
     <Swipeable renderRightActions={() => renderRightActions(item._id)}>
       <TouchableOpacity

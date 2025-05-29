@@ -17,7 +17,6 @@ interface AuthenticatedWebSocket extends WebSocket {
   connectionId?: string;
   lastActivity?: number;
   messageCount?: number;
-  chatType?: "documents" | "messages"; // Тип чата
 }
 
 interface WebSocketMessage {
@@ -26,13 +25,11 @@ interface WebSocketMessage {
     message?: string;
     chatId?: string;
     token?: string;
-    chatType?: "documents" | "messages";
   };
 }
 
 interface UserConnection {
   connections: Map<string, AuthenticatedWebSocket>; // connectionId -> WebSocket
-  activeChats: Map<string, string>; // chatType -> chatId
   lastActivity: number;
   messageCount: number;
 }
@@ -64,7 +61,7 @@ export class ChatWebSocketServer {
       wsMonitor.updateConnectionCount(this.connectionCount, this.users.size);
     }, 30000);
 
-    console.log("WebSocket server initialized with enhanced scaling support", {
+    console.log("WebSocket server initialized", {
       maxConnections: this.config.maxConnections,
       maxConnectionsPerUser: this.config.maxConnectionsPerUser,
       rateLimitMaxMessages: this.config.rateLimitMaxMessages,
@@ -285,7 +282,7 @@ export class ChatWebSocketServer {
     ws: AuthenticatedWebSocket,
     message: WebSocketMessage
   ) {
-    const { token, chatId, chatType = "messages" } = message.data;
+    const { token, chatId } = message.data;
 
     if (!token) {
       ws.send(
@@ -315,7 +312,6 @@ export class ChatWebSocketServer {
     if (!userConnection) {
       userConnection = {
         connections: new Map(),
-        activeChats: new Map(),
         lastActivity: Date.now(),
         messageCount: 0,
       };
@@ -329,7 +325,6 @@ export class ChatWebSocketServer {
     }
 
     ws.userId = userId;
-    ws.chatType = chatType;
     userConnection.connections.set(ws.connectionId!, ws);
     userConnection.lastActivity = Date.now();
 
@@ -350,7 +345,6 @@ export class ChatWebSocketServer {
       }
 
       ws.chatId = chatId;
-      userConnection.activeChats.set(chatType, chatId);
 
       ws.send(
         JSON.stringify({
@@ -359,7 +353,6 @@ export class ChatWebSocketServer {
             chatId,
             messages: chat.messages,
             title: chat.title,
-            chatType,
           },
         })
       );
@@ -370,7 +363,6 @@ export class ChatWebSocketServer {
           data: {
             userId,
             connectionId: ws.connectionId,
-            chatType,
           },
         })
       );
@@ -391,7 +383,7 @@ export class ChatWebSocketServer {
       return;
     }
 
-    const { chatId, chatType = "messages" } = message.data;
+    const { chatId } = message.data;
 
     if (!chatId) {
       ws.send(
@@ -419,12 +411,6 @@ export class ChatWebSocketServer {
     }
 
     ws.chatId = chatId;
-    ws.chatType = chatType;
-
-    const userConnection = this.users.get(ws.userId);
-    if (userConnection) {
-      userConnection.activeChats.set(chatType, chatId);
-    }
 
     ws.send(
       JSON.stringify({
@@ -433,7 +419,6 @@ export class ChatWebSocketServer {
           chatId,
           messages: chat.messages,
           title: chat.title,
-          chatType,
         },
       })
     );
@@ -453,31 +438,16 @@ export class ChatWebSocketServer {
       return;
     }
 
-    const { chatType = "messages" } = message.data;
-
     try {
-      const chatTitle =
-        chatType === "documents" ? "Новый чат для документов" : "Новый чат";
-      const chatDescription =
-        chatType === "documents"
-          ? "Чат для работы с документами"
-          : "Новая беседа";
-
       const chat = await Chat.create({
         userId: ws.userId,
-        title: chatTitle,
-        description: chatDescription,
-        sourceType: chatType === "documents" ? "document" : "manual",
+        title: "Новый чат",
+        description: "Новая беседа",
+        sourceType: "manual",
         messages: [],
       });
 
       ws.chatId = chat._id.toString();
-      ws.chatType = chatType;
-
-      const userConnection = this.users.get(ws.userId);
-      if (userConnection) {
-        userConnection.activeChats.set(chatType, chat._id.toString());
-      }
 
       ws.send(
         JSON.stringify({
@@ -485,7 +455,6 @@ export class ChatWebSocketServer {
           data: {
             chatId: chat._id,
             title: chat.title,
-            chatType,
           },
         })
       );
@@ -598,11 +567,8 @@ export class ChatWebSocketServer {
         }
       );
 
-      // Подготавливаем сообщения для OpenAI
-      const systemPrompt =
-        ws.chatType === "documents"
-          ? "You are a comprehensive legal document analysis assistant. You help users analyze multiple documents together, providing detailed insights, summaries, and connections between documents. You can work with various document types including PDFs, Word documents, images, and other legal documents. When analyzing documents, provide: 1) Summary of each document, 2) Key insights and findings, 3) Connections or relationships between documents, 4) Overall analysis and recommendations, 5) Legal implications and advice. Always automatically detect the user's language and reply in that language. Focus on legal aspects, document compliance, and practical recommendations."
-          : "You are a legal assistant helping users with any legal issues, including visas, migration, deportation, documents, police, court, lawyers, legal translations, work permits, asylum, residence permits, study abroad, and legal statement filings. Automatically detect the user's language and reply in that language. If the question is not legal-related, politely explain you can only help with legal topics.";
+      // Простой промпт для всех чатов
+      const systemPrompt = "You are a comprehensive legal assistant helping users with any legal issues, including document analysis, visas, migration, deportation, documents, police, court, lawyers, legal translations, work permits, asylum, residence permits, study abroad, and legal statement filings. Automatically detect the user's language and reply in that language. If the question is not legal-related, politely explain you can only help with legal topics.";
 
       const openaiMessages = [
         {
@@ -741,14 +707,11 @@ export class ChatWebSocketServer {
     });
   }
 
-  public sendToUser(userId: string, message: any, chatType?: string) {
+  public sendToUser(userId: string, message: any) {
     const userConnection = this.users.get(userId);
     if (userConnection) {
       userConnection.connections.forEach((client) => {
-        if (
-          client.readyState === WebSocket.OPEN &&
-          (!chatType || client.chatType === chatType)
-        ) {
+        if (client.readyState === WebSocket.OPEN) {
           client.send(JSON.stringify(message));
         }
       });

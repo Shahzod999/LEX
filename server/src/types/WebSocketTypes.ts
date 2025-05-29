@@ -4,7 +4,6 @@ export interface WebSocketMessage {
     message?: string;
     chatId?: string;
     token?: string;
-    chatType?: "documents" | "messages";
   };
 }
 
