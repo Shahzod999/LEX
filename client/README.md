@@ -1,50 +1,265 @@
-# Welcome to your Expo app 👋
+# Подробное объяснение WebSocket чата в React Native
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+## Архитектура системы
 
-## Get started
+Система состоит из нескольких ключевых компонентов:
 
-1. Install dependencies
+1. **ChatScreen** - основной экран чата
+2. **ChatHistoryMenu** - боковое меню с историей чатов
+3. **useWebSocketChat** - хук для управления WebSocket соединением
+4. **WebSocketChatService** - сервис для работы с WebSocket
 
-   ```bash
-   npm install
-   ```
+## Как работает WebSocket
 
-2. Start the app
+### 1. Установка соединения
 
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```javascript
+// WebSocketChatService создает соединение
+const wsUrl = process.env.EXPO_PUBLIC_WS_URL || "ws://localhost:3000/ws/chat";
+this.socket = new WebSocket(wsUrl);
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+### 2. Жизненный цикл соединения
 
-## Learn more
+**Подключение:**
 
-To learn more about developing your project with Expo, look at the following resources:
+- Создается WebSocket соединение
+- При успешном подключении отправляется токен аутентификации
+- Сервер отвечает подтверждением
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+**Обработка событий:**
 
-## Join the community
+```javascript
+this.socket.onopen = () => {
+  // Соединение установлено
+  this.send({
+    type: "join_chat",
+    data: { token: this.token },
+  });
+};
 
-Join our community of developers creating universal apps.
+this.socket.onmessage = (event) => {
+  // Получение сообщений от сервера
+  const response = JSON.parse(event.data);
+  this.handleMessage(response);
+};
+```
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+### 3. Типы сообщений WebSocket
+
+**От клиента к серверу:**
+
+- `join_chat` - присоединиться к существующему чату
+- `create_chat` - создать новый чат
+- `message` - отправить сообщение
+
+**От сервера к клиенту:**
+
+- `connected` - соединение установлено
+- `authenticated` - пользователь аутентифицирован
+- `chat_joined` - присоединился к чату
+- `chat_created` - чат создан
+- `user_message` - получено сообщение пользователя
+- `assistant_message_start` - ИИ начал отвечать
+- `assistant_message_token` - получен токен ответа ИИ
+- `assistant_message_complete` - ответ ИИ завершен
+- `error` - произошла ошибка
+
+## Потоковая передача сообщений (Streaming)
+
+### Как работает потоковая передача:
+
+1. **Начало ответа:** Сервер отправляет `assistant_message_start`
+2. **Передача токенов:** Сервер отправляет множество `assistant_message_token` с частями ответа
+3. **Завершение:** Сервер отправляет `assistant_message_complete` с полным ответом
+
+```javascript
+service.onMessage("assistant_message_start", () => {
+  setIsTyping(true); // Показываем индикатор печати
+  setStreamingMessage(""); // Очищаем буфер
+});
+
+service.onMessage("assistant_message_token", (data) => {
+  // Добавляем новый токен к существующему тексту
+  setStreamingMessage((prev) => prev + data.token);
+});
+
+service.onMessage("assistant_message_complete", (data) => {
+  setIsTyping(false); // Скрываем индикатор
+  setStreamingMessage(""); // Очищаем буфер
+  // Добавляем финальное сообщение в чат
+});
+```
+
+### Преимущества потоковой передачи:
+
+- Пользователь видит ответ в реальном времени
+- Создается ощущение "живого" разговора
+- Быстрая обратная связь
+
+## Управление состоянием
+
+### useWebSocketChat хук
+
+Этот хук инкапсулирует всю логику WebSocket:
+
+```javascript
+const {
+  isConnected,        // Статус соединения
+  isConnecting,       // Процесс подключения
+  currentChatId,      // ID текущего чата
+  isTyping,           // ИИ печатает ответ
+  streamingMessage,   // Текущий потоковый текст
+  sendMessage,        // Функция отправки сообщения
+  createChat,         // Создание нового чата
+  joinChat,           // Присоединение к чату
+  connect,            // Подключение к WebSocket
+  disconnect          // Отключение
+} = useWebSocketChat({...});
+```
+
+### Состояния в ChatScreen
+
+```javascript
+const [messages, setMessages] = useState<Message[]>([...]);     // Сообщения чата
+const [inputText, setInputText] = useState("");                 // Текст ввода
+const [isSending, setIsSending] = useState(false);             // Отправка сообщения
+const [connectionError, setConnectionError] = useState(null);   // Ошибки соединения
+```
+
+## Обработка сообщений
+
+### Отправка сообщения
+
+```javascript
+const handleSendMessage = async () => {
+  if (inputText.trim() === "" || !isConnected || isSending) return;
+
+  setIsSending(true); // Блокируем повторную отправку
+  sendWebSocketMessage(inputText); // Отправляем через WebSocket
+  setInputText(""); // Очищаем поле ввода
+
+  // Добавляем индикатор "печатает"
+  const typingIndicator = {
+    id: Date.now() + 1,
+    text: "Thinking...",
+    isBot: true,
+    isTyping: true,
+  };
+  setMessages((prev) => [...prev, typingIndicator]);
+};
+```
+
+### Получение сообщения
+
+```javascript
+onMessage: useCallback((wsMessage: ChatMessage) => {
+  const newMessage = {
+    id: Date.now(),
+    text: wsMessage.content,
+    isBot: wsMessage.role === "assistant",
+    messageId: wsMessage.messageId,
+    timestamp: wsMessage.timestamp,
+  };
+
+  setMessages((prev) => {
+    // Удаляем индикатор печати
+    const filteredMessages = prev.filter((m) => !m.isTyping);
+    // Добавляем новое сообщение
+    return [...filteredMessages, newMessage];
+  });
+
+  setIsSending(false); // Разблокируем отправку
+}, []);
+```
+
+## Переподключение и обработка ошибок
+
+### Автоматическое переподключение
+
+```javascript
+private handleReconnect() {
+  if (this.reconnectAttempts < this.maxReconnectAttempts) {
+    this.reconnectAttempts++;
+
+    setTimeout(() => {
+      this.connect().catch(console.error);
+    }, this.reconnectDelay * this.reconnectAttempts); // Экспоненциальная задержка
+  }
+}
+```
+
+### Обработка ошибок
+
+- **Ошибки соединения:** Показываются в статус-индикаторе
+- **Ошибки отправки:** Сбрасывают состояние отправки
+- **Таймауты:** Автоматически очищаются через 5 секунд
+
+## История чатов
+
+### Загрузка истории
+
+```javascript
+useEffect(() => {
+  if (isConnected && !currentChatId && !hasLoadedInitialChat && chatHistory) {
+    if (chatHistory.length > 0) {
+      // Присоединяемся к последнему чату
+      const lastChat = chatHistory[0];
+      joinChat(lastChat._id);
+    } else {
+      // Создаем новый чат
+      createChat();
+    }
+  }
+}, [isConnected, currentChatId, hasLoadedInitialChat, chatHistory]);
+```
+
+### Переключение между чатами
+
+```javascript
+const handleSelectChat = (chatId: string) => {
+  if (isConnected) {
+    setMessages([]); // Очищаем текущие сообщения
+    setIsSending(false); // Сбрасываем состояние отправки
+    joinChat(chatId); // Присоединяемся к выбранному чату
+  }
+};
+```
+
+## Ключевые особенности реализации
+
+### 1. Singleton паттерн для WebSocket
+
+- Один экземпляр сервиса на всё приложение
+- Переиспользование соединения между компонентами
+
+### 2. Индикаторы состояния
+
+- Статус соединения (подключен/отключен/ошибка)
+- Индикатор печати ИИ
+- Блокировка повторных отправок
+
+### 3. Оптимизация UI
+
+- Потоковое отображение ответов ИИ
+- Анимированное боковое меню
+- Swipe-жесты для навигации
+
+### 4. Управление памятью
+
+- Очистка обработчиков при переподключении
+- Удаление временных сообщений (индикаторы печати)
+- Правильная очистка состояния при смене чатов
+
+## Поток данных
+
+1. **Пользователь отправляет сообщение**
+2. **WebSocket отправляет сообщение на сервер**
+3. **Сервер сохраняет сообщение пользователя**
+4. **Сервер начинает генерацию ответа ИИ**
+5. **Сервер отправляет токены ответа по мере генерации**
+6. **Клиент отображает потоковый ответ в реальном времени**
+7. **Сервер завершает ответ и сохраняет его**
+8. **Клиент получает финальную версию и обновляет историю**
+
+Эта архитектура обеспечивает быстрый, отзывчивый интерфейс чата с поддержкой реального времени и надежным управлением состоянием.

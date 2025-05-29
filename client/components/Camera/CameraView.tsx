@@ -1,7 +1,12 @@
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import React, { useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { CameraView, CameraType, FlashMode, useCameraPermissions } from "expo-camera";
+import {
+  CameraView,
+  CameraType,
+  FlashMode,
+  useCameraPermissions,
+} from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
 
 interface CameraProps {
@@ -12,7 +17,7 @@ const CameraViewComponent: React.FC<CameraProps> = ({ onPhotoTaken }) => {
   const [permission, requestPermission] = useCameraPermissions();
   const [facing, setFacing] = useState<CameraType>("back");
   const [flash, setFlash] = useState<FlashMode>("off");
-  
+
   // Reference to the camera component to call takePictureAsync
   const cameraRef = useRef<CameraView>(null);
 
@@ -54,11 +59,11 @@ const CameraViewComponent: React.FC<CameraProps> = ({ onPhotoTaken }) => {
   };
 
   const toggleCameraFacing = () => {
-    setFacing(current => (current === "back" ? "front" : "back"));
+    setFacing((current) => (current === "back" ? "front" : "back"));
   };
 
   const toggleFlash = () => {
-    setFlash(current => {
+    setFlash((current) => {
       if (current === "off") return "on";
       if (current === "on") return "auto";
       return "off";
@@ -67,15 +72,23 @@ const CameraViewComponent: React.FC<CameraProps> = ({ onPhotoTaken }) => {
 
   if (!permission) {
     // Camera permissions are still loading
-    return <View style={styles.container}><Text style={styles.text}>Loading camera permissions...</Text></View>;
+    return (
+      <View style={styles.container}>
+        <Text style={styles.text}>Loading camera permissions...</Text>
+      </View>
+    );
   }
 
   if (!permission.granted) {
     // Camera permissions are not granted yet
     return (
       <View style={styles.container}>
-        <Text style={styles.text}>We need your permission to show the camera</Text>
-        <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
+        <Text style={styles.text}>
+          We need your permission to show the camera
+        </Text>
+        <TouchableOpacity
+          style={styles.permissionButton}
+          onPress={requestPermission}>
           <Text style={styles.permissionButtonText}>Grant permission</Text>
         </TouchableOpacity>
       </View>
@@ -88,7 +101,8 @@ const CameraViewComponent: React.FC<CameraProps> = ({ onPhotoTaken }) => {
         ref={cameraRef}
         style={styles.camera}
         facing={facing}
-        flash={flash}>
+        flash={flash}
+        zoom={0}>
         <View style={styles.documentFrame}>
           <View style={styles.cornerTL} />
           <View style={styles.cornerTR} />
@@ -97,17 +111,13 @@ const CameraViewComponent: React.FC<CameraProps> = ({ onPhotoTaken }) => {
         </View>
 
         <View style={styles.topControls}>
-          <TouchableOpacity 
-            style={styles.backButton}
-            onPress={handleBack}>
+          <TouchableOpacity style={styles.backButton} onPress={handleBack}>
             <Ionicons name="arrow-back" size={24} color="white" />
           </TouchableOpacity>
         </View>
 
         <View style={styles.cameraControls}>
-          <TouchableOpacity
-            style={styles.cameraButton}
-            onPress={toggleFlash}>
+          <TouchableOpacity style={styles.cameraButton} onPress={toggleFlash}>
             <Ionicons
               name={
                 flash === "off"
@@ -121,9 +131,7 @@ const CameraViewComponent: React.FC<CameraProps> = ({ onPhotoTaken }) => {
             />
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.captureButton}
-            onPress={takePicture}>
+          <TouchableOpacity style={styles.captureButton} onPress={takePicture}>
             <View style={styles.captureButtonInner} />
           </TouchableOpacity>
 
@@ -257,7 +265,7 @@ const styles = StyleSheet.create({
   cornerTL: {
     position: "absolute",
     top: "20%",
-    left: "15%",
+    left: "5%",
     width: 30,
     height: 30,
     borderTopWidth: 3,
@@ -267,7 +275,7 @@ const styles = StyleSheet.create({
   cornerTR: {
     position: "absolute",
     top: "20%",
-    right: "15%",
+    right: "5%",
     width: 30,
     height: 30,
     borderTopWidth: 3,
@@ -277,7 +285,7 @@ const styles = StyleSheet.create({
   cornerBL: {
     position: "absolute",
     bottom: "20%",
-    left: "15%",
+    left: "5%",
     width: 30,
     height: 30,
     borderBottomWidth: 3,
@@ -287,7 +295,7 @@ const styles = StyleSheet.create({
   cornerBR: {
     position: "absolute",
     bottom: "20%",
-    right: "15%",
+    right: "5%",
     width: 30,
     height: 30,
     borderBottomWidth: 3,

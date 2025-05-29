@@ -11,9 +11,8 @@ import {
   TouchableOpacity,
   SafeAreaView,
 } from "react-native";
-import React, { useState, useEffect } from "react";
+import React, { useState, useCallback } from "react";
 import Header from "@/components/Card/Header";
-import ThemedCard from "@/components/ThemedCard";
 import ToggleTabsRN from "@/components/ToggleTabs/ToggleTabsRN";
 import HomeCard from "@/components/Card/HomeCard";
 import { useTheme } from "@/context/ThemeContext";
@@ -21,16 +20,31 @@ import { Ionicons } from "@expo/vector-icons";
 import CameraView from "@/components/Camera/CameraView";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
-import { useGetOpenAIMutation } from "@/redux/api/endpoints/openAI";
-import * as FileSystem from "expo-file-system";
-import ThemedButton from "@/components/ThemedButton";
+import { useAppSelector } from "@/hooks/reduxHooks";
+import { selectToken } from "@/redux/features/tokenSlice";
+import { useWebSocketChat } from "@/hooks/useWebSocketChat";
+import {
+  useDeleteDocumentMutation,
+  useUploadDocumentMutation,
+} from "@/redux/api/endpoints/documentApiSlice";
+import { Loading } from "@/components/LoadingScreen";
 
-// Message interface
+// WebSocket message interface
+interface ChatMessage {
+  messageId?: string;
+  content: string;
+  role: "user" | "assistant";
+  timestamp?: Date;
+}
+
+// UI message interface
 interface Message {
   id: number;
   text: string;
   isBot: boolean;
   isTyping?: boolean;
+  messageId?: string;
+  timestamp?: Date;
 }
 
 const tabs = [
@@ -39,96 +53,144 @@ const tabs = [
 ];
 
 const ScanScreen = () => {
+  const { colors } = useTheme();
+  const token = useAppSelector(selectToken);
   const [activeTab, setActiveTab] = useState<string>("1");
   const [showCamera, setShowCamera] = useState(false);
-  const [scannedImage, setScannedImage] = useState<string | null>(null);
-  const [documentType, setDocumentType] = useState<string | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [scannedDocument, setScannedDocument] = useState<{
+    uri: string;
+    type: string;
+    name?: string;
+  } | null>(null);
   const [inputText, setInputText] = useState("");
-  const [messageHistory, setMessageHistory] = useState([
-    {
-      role: "system",
-      content:
-        "You are a legal document analysis assistant specialized in analyzing legal documents. Help users understand the content of their scanned documents, identify important legal terms, and clarify any legal implications. Provide helpful, concise information about the document's content.",
-    },
-  ]);
-  const { colors } = useTheme();
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [documentId, setDocumentId] = useState<string | null>(null);
+  const [chatId, setChatId] = useState<string | null>(null);
+  const [uploadDocument, { isLoading: isUploading }] =
+    useUploadDocumentMutation();
+  const [deleteDocument, { isLoading: isDeleting }] =
+    useDeleteDocumentMutation();
 
-  const [getOpenAI, { isLoading, error }] = useGetOpenAIMutation();
+  console.log(chatId, "scan");
 
-  useEffect(() => {
-    if (scannedImage && !messages.length) {
-      analyzeDocument();
-    }
-  }, [scannedImage]);
+  // WebSocket chat integration
+  const {
+    isConnected,
+    isConnecting,
+    isTyping,
+    streamingMessage,
+    sendMessage: sendWebSocketMessage,
+    joinChat,
+  } = useWebSocketChat({
+    token: token || "",
+    onMessage: useCallback((wsMessage: ChatMessage) => {
+      const newMessage: Message = {
+        id: Date.now(),
+        text: wsMessage.content,
+        isBot: wsMessage.role === "assistant",
+        messageId: wsMessage.messageId,
+        timestamp: wsMessage.timestamp,
+      };
 
-  const generateImageMessage = async (imageUri: string) => {
-    const base64 = await FileSystem.readAsStringAsync(imageUri, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
+      setMessages((prev) => {
+        const filteredMessages = prev.filter((m) => !m.isTyping);
+        return [...filteredMessages, newMessage];
+      });
+    }, []),
+    onError: useCallback((error: string) => {
+      console.error("WebSocket error:", error);
+    }, []),
+    onChatJoined: useCallback(
+      (data: { chatId: string; messages: any[]; title: string }) => {
+        const historyMessages: Message[] = data.messages.map(
+          (msg: any, index: number) => ({
+            id: Date.now() + index,
+            text: msg.content,
+            isBot: msg.role === "assistant",
+            messageId: msg._id,
+            timestamp: new Date(msg.createdAt),
+          })
+        );
+        setMessages(historyMessages);
+      },
+      []
+    ),
+  });
 
-    return {
-      role: "user",
-      content: [
-        {
-          type: "text",
-          text: "Please analyze this document and summarize the key information.",
-        },
-        {
-          type: "image_url",
-          image_url: {
-            url: `data:image/jpeg;base64,${base64}`,
-          },
-        },
-      ],
-    };
+  const sanitizeFileName = (
+    fileName: string,
+    maxLength: number = 50
+  ): string => {
+    if (!fileName) return `document_${Date.now()}`;
+
+    const lastDotIndex = fileName.lastIndexOf(".");
+    const name =
+      lastDotIndex > 0 ? fileName.substring(0, lastDotIndex) : fileName;
+    const extension = lastDotIndex > 0 ? fileName.substring(lastDotIndex) : "";
+
+    const sanitized = name
+      .replace(/[^\w\s-]/g, "")
+      .replace(/\s+/g, "_")
+      .substring(0, maxLength - extension.length - 10)
+      .trim();
+
+    return `${sanitized}_${Date.now()}${extension}`;
   };
 
-  const analyzeDocument = async () => {
-    if (!scannedImage) return;
-    setIsAnalyzing(true);
+  // Handle streaming message display
+  React.useEffect(() => {
+    if (isTyping && streamingMessage) {
+      setMessages((prev) => {
+        const filteredMessages = prev.filter((m) => !m.isTyping);
+        const typingMessage: Message = {
+          id: Date.now(),
+          text: streamingMessage,
+          isBot: true,
+          isTyping: true,
+        };
+        return [...filteredMessages, typingMessage];
+      });
+    } else if (!isTyping) {
+      setMessages((prev) => prev.filter((m) => !m.isTyping));
+    }
+  }, [isTyping, streamingMessage]);
+
+  const handleDocumentUpload = async (
+    documentUri: string,
+    documentType: string,
+    fileName?: string
+  ) => {
+    if (!token) return;
 
     try {
-      const imageMessage = await generateImageMessage(scannedImage);
+      const formData = new FormData();
+      const sanitizedFileName = sanitizeFileName(
+        fileName || `document_${Date.now()}`
+      );
 
-      const updatedHistory = [...messageHistory, imageMessage];
+      formData.append("files", {
+        uri: documentUri,
+        type: documentType,
+        name: sanitizedFileName,
+      } as any);
 
-      const response = await getOpenAI({
-        model: process.env.EXPO_PUBLIC_OPENAI_MODEL,
-        messages: updatedHistory,
-      }).unwrap();
+      formData.append("title", `Document Analysis - ${sanitizedFileName}`);
+      formData.append("language", "Russian");
 
-      const botResponse = response.choices[0].message.content;
+      const response = await uploadDocument(formData).unwrap();
 
-      setMessages([
-        {
-          id: 1,
-          text: botResponse,
-          isBot: true,
-        },
-      ]);
+      if (response.chat?._id) {
+        setChatId(response.chat._id);
+        setDocumentId(response.document._id);
 
-      setMessageHistory([
-        ...updatedHistory,
-        {
-          role: "assistant",
-          content: botResponse,
-        },
-      ]);
-    } catch (err) {
-      console.error("OpenAI error during document analysis:", err);
-      setMessages([
-        {
-          id: 1,
-          text: "⚠️ Не удалось проанализировать документ. Попробуй ещё раз.",
-          isBot: true,
-        },
-      ]);
-    } finally {
-      setIsAnalyzing(false);
+        // Join the chat after successful upload
+        joinChat(response.chat._id);
+      }
+    } catch (error) {
+      console.error("Error uploading document:", error);
     }
   };
+
   const handleScan = () => {
     setShowCamera(true);
   };
@@ -143,190 +205,116 @@ const ScanScreen = () => {
         });
 
         if (!result.canceled && result.assets?.[0]?.uri) {
-          setScannedImage(result.assets[0].uri);
-          setDocumentType("image");
+          const asset = result.assets[0];
+          const sanitizedFileName = sanitizeFileName(`image_${Date.now()}.jpg`);
+          setScannedDocument({
+            uri: asset.uri,
+            type: "image/jpeg",
+            name: sanitizedFileName,
+          });
+          await handleDocumentUpload(
+            asset.uri,
+            "image/jpeg",
+            sanitizedFileName
+          );
         }
       } else {
-        await handlePickFile();
+        const result = await DocumentPicker.getDocumentAsync({
+          type: "*/*",
+          copyToCacheDirectory: true,
+        });
+
+        if (!result.canceled && result.assets?.[0]) {
+          const asset = result.assets[0];
+          const sanitizedFileName = sanitizeFileName(
+            asset.name || `document_${Date.now()}`
+          );
+          setScannedDocument({
+            uri: asset.uri,
+            type: asset.mimeType || "application/octet-stream",
+            name: sanitizedFileName,
+          });
+          await handleDocumentUpload(
+            asset.uri,
+            asset.mimeType || "application/octet-stream",
+            sanitizedFileName
+          );
+        }
       }
     } catch (error) {
       console.error("Error picking document:", error);
     }
   };
 
-  const handlePhotoTaken = (uri: string) => {
+  const handlePhotoTaken = async (uri: string) => {
     if (uri) {
-      setScannedImage(uri);
-      setDocumentType("image");
+      // Close camera immediately after photo is taken
+      setShowCamera(false);
+
+      const sanitizedFileName = sanitizeFileName(`scanned_${Date.now()}.jpg`);
+      setScannedDocument({
+        uri,
+        type: "image/jpeg",
+        name: sanitizedFileName,
+      });
+      try {
+        await handleDocumentUpload(uri, "image/jpeg", sanitizedFileName);
+      } catch (error) {
+        console.error("Error uploading document:", error);
+      }
     }
-    setShowCamera(false);
   };
 
-  const handleSendMessage = async () => {
-    if (inputText.trim() === "") return;
+  const handleSendMessage = () => {
+    if (inputText.trim() === "" || !isConnected || !chatId) return;
 
-    const newMessage = {
-      id: messages.length + 1,
-      text: inputText,
-      isBot: false,
-    };
-
-    setMessages((prev) => [...prev, newMessage]);
-    setMessageHistory((prev) => [
-      ...prev,
-      { role: "user", content: inputText },
-    ]);
+    sendWebSocketMessage(inputText);
     setInputText("");
 
-    // Add typing indicator
-    const typingIndicator = {
-      id: messages.length + 2,
+    const typingIndicator: Message = {
+      id: Date.now() + 1,
       text: "Thinking...",
       isBot: true,
       isTyping: true,
     };
     setMessages((prev) => [...prev, typingIndicator]);
+  };
 
-    try {
-      const response = await getOpenAI({
-        model: process.env.EXPO_PUBLIC_OPENAI_MODEL,
-        messages: [...messageHistory, { role: "user", content: inputText }],
-      }).unwrap();
-
-      const botResponse = {
-        id: messages.length + 3,
-        text: response.choices[0].message.content,
-        isBot: true,
-      };
-
-      setMessages((prev) => [...prev.filter((m) => !m.isTyping), botResponse]);
-      setMessageHistory((prev) => [
-        ...prev,
-        { role: "assistant", content: response.choices[0].message.content },
-      ]);
-    } catch (err) {
-      console.error("OpenAI error:", err);
-
-      // Remove typing indicator and add error message
-      setMessages((prev) => [
-        ...prev.filter((m) => !m.isTyping),
-        {
-          id: messages.length + 3,
-          text: "Sorry, I encountered an error while processing your question. Please try again.",
-          isBot: true,
-        },
-      ]);
+  const handleDeleteDocument = async () => {
+    if (documentId) {
+      try {
+        await deleteDocument(documentId).unwrap();
+        setScannedDocument(null);
+        setMessages([]);
+        setDocumentId(null);
+        setChatId(null);
+      } catch (error) {
+        console.log(error);
+      }
     }
   };
 
-  const handlePickFile = async () => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: "*/*", // Allow all file types
-        copyToCacheDirectory: true,
-      });
+  const handleSaveDocument = () => {
+    setScannedDocument(null);
+    setMessages([]);
+    setDocumentId(null);
+    setChatId(null);
+  };
 
-      if (!result.canceled && result.assets?.[0]) {
-        const asset = result.assets[0];
-        const { uri, mimeType, name } = asset;
+  const getDocumentIcon = (type: string) => {
+    if (type.includes("pdf")) return "document-text";
+    if (type.includes("word") || type.includes("doc")) return "document";
+    if (type.includes("excel") || type.includes("sheet")) return "grid";
+    if (type.includes("image")) return "image";
+    return "document-outline";
+  };
 
-        setScannedImage(uri);
-
-        // Determine document type based on mimeType or file extension
-        if (mimeType?.includes("pdf") || name?.endsWith(".pdf")) {
-          setDocumentType("pdf");
-        } else if (
-          mimeType?.includes("word") ||
-          name?.endsWith(".doc") ||
-          name?.endsWith(".docx")
-        ) {
-          setDocumentType("word");
-        } else if (
-          mimeType?.includes("excel") ||
-          name?.endsWith(".xls") ||
-          name?.endsWith(".xlsx") ||
-          name?.endsWith(".csv")
-        ) {
-          setDocumentType("excel");
-        } else if (
-          mimeType?.includes("image") ||
-          name?.match(/\.(jpeg|jpg|png|gif|webp)$/i)
-        ) {
-          setDocumentType("image");
-        } else {
-          setDocumentType("document");
-        }
-
-        // Add a typing indicator message while analyzing
-        setMessages([
-          {
-            id: 1,
-            text: "Analyzing document...",
-            isBot: true,
-            isTyping: true,
-          },
-        ]);
-
-        // Analyze the document with OpenAI
-        try {
-          // For non-image files, we would need to extract content or use a different API
-          // Currently only handling images directly with GPT-4o
-          let updatedHistory;
-
-          if (
-            mimeType?.includes("image") ||
-            name?.match(/\.(jpeg|jpg|png|gif|webp)$/i)
-          ) {
-            // If it's an image, use the existing image analysis function
-            const imageMessage = await generateImageMessage(uri);
-            updatedHistory = [...messageHistory, imageMessage];
-          } else {
-            // For other file types, just send metadata
-            updatedHistory = [
-              ...messageHistory,
-              {
-                role: "user",
-                content: `I've uploaded a ${documentType} file named "${name}". Please explain what information you would need to analyze this type of document.`,
-              },
-            ];
-          }
-
-          const response = await getOpenAI({
-            model: process.env.EXPO_PUBLIC_OPENAI_MODEL,
-            messages: updatedHistory,
-          }).unwrap();
-
-          const botResponse = response.choices[0].message.content;
-
-          setMessages([
-            {
-              id: 1,
-              text: botResponse,
-              isBot: true,
-            },
-          ]);
-
-          setMessageHistory([
-            ...updatedHistory,
-            {
-              role: "assistant",
-              content: botResponse,
-            },
-          ]);
-        } catch (err) {
-          console.error("OpenAI error during document analysis:", err);
-          setMessages([
-            {
-              id: 1,
-              text: "⚠️ Failed to analyze the document. Please try again.",
-              isBot: true,
-            },
-          ]);
-        }
-      }
-    } catch (error) {
-      console.error("Error picking document:", error);
-    }
+  const getDocumentTypeName = (type: string) => {
+    if (type.includes("pdf")) return "PDF";
+    if (type.includes("word") || type.includes("doc")) return "Word";
+    if (type.includes("excel") || type.includes("sheet")) return "Excel";
+    if (type.includes("image")) return "Image";
+    return "Document";
   };
 
   if (showCamera) {
@@ -335,6 +323,7 @@ const ScanScreen = () => {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {isDeleting && <Loading />}
       <SafeAreaView style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.chatContent}>
           <Header
@@ -342,67 +331,26 @@ const ScanScreen = () => {
             subtitle="Scan and analyze legal documents instantly"
           />
 
-          <ThemedCard style={styles.scanCard}>
+          <View style={styles.scanCard}>
             <ToggleTabsRN tabs={tabs} onTabChange={setActiveTab} />
-            <Pressable
-              onPress={activeTab === "1" ? handleScan : handleUpload}
-              disabled={scannedImage !== null}>
-              {({ pressed }) => (
-                <View
-                  style={[
-                    styles.scanCardContent,
-                    pressed && styles.scanCardContentPressed,
-                    { borderColor: colors.accent },
-                    scannedImage && styles.scanCardWithDocument,
-                  ]}>
-                  {scannedImage ? (
-                    <View style={styles.documentContainer}>
-                      {documentType === "image" || documentType === null ? (
-                        <Image
-                          source={{ uri: scannedImage }}
-                          style={styles.documentImage}
-                        />
-                      ) : (
-                        <View
-                          style={[
-                            styles.documentIconContainer,
-                            { backgroundColor: colors.accent + "20" },
-                          ]}>
-                          <Ionicons
-                            name={
-                              documentType === "pdf"
-                                ? "document-text"
-                                : documentType === "word"
-                                ? "document"
-                                : documentType === "excel"
-                                ? "grid"
-                                : "document-outline"
-                            }
-                            size={60}
-                            color={colors.accent}
-                          />
-                          <Text
-                            style={[
-                              styles.documentCaption,
-                              { color: colors.text },
-                            ]}>
-                            {documentType?.toUpperCase()} Document
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                  ) : (
+
+            {!scannedDocument ? (
+              <Pressable
+                onPress={activeTab === "1" ? handleScan : handleUpload}>
+                {({ pressed }) => (
+                  <View
+                    style={[
+                      styles.scanCardContent,
+                      pressed && styles.scanCardContentPressed,
+                      { borderColor: colors.accent },
+                    ]}>
                     <HomeCard
                       title={
                         activeTab === "1"
                           ? "Click to scan document"
                           : "Click to upload document"
                       }
-                      description={
-                        activeTab === "1"
-                          ? "Upload a clear photo or PDF of your legal document for analysis"
-                          : "Upload a clear photo or PDF of your legal document for analysis"
-                      }
+                      description="Upload a clear photo or document for AI analysis"
                       icon={
                         activeTab === "1"
                           ? "camera-outline"
@@ -410,110 +358,124 @@ const ScanScreen = () => {
                       }
                       color={colors.accent}
                     />
-                  )}
-                  {scannedImage && (
-                    <View style={styles.imagePreviewContainer}>
-                      <Pressable
-                        style={styles.clearButton}
-                        onPress={() => {
-                          setScannedImage(null);
-                          setDocumentType(null);
-                          setMessages([]);
-                          setMessageHistory([
-                            {
-                              role: "system",
-                              content:
-                                "You are a legal document analysis assistant specialized in analyzing legal documents. Help users understand the content of their scanned documents, identify important legal terms, and clarify any legal implications. Provide helpful, concise information about the document's content.",
-                            },
-                          ]);
-                        }}>
-                        <Text
-                          style={[
-                            styles.clearButtonText,
-                            { color: colors.warning },
-                          ]}>
-                          Очистить
-                        </Text>
-                      </Pressable>
+                  </View>
+                )}
+              </Pressable>
+            ) : (
+              <View
+                style={[
+                  styles.scanCardContent,
+                  { borderColor: colors.accent },
+                ]}>
+                <View style={styles.documentContainer}>
+                  {scannedDocument.type.includes("image") ? (
+                    <Image
+                      source={{ uri: scannedDocument.uri }}
+                      style={styles.documentImage}
+                    />
+                  ) : (
+                    <View
+                      style={[
+                        styles.documentIconContainer,
+                        { backgroundColor: colors.accent + "20" },
+                      ]}>
+                      <Ionicons
+                        name={getDocumentIcon(scannedDocument.type)}
+                        size={60}
+                        color={colors.accent}
+                      />
+                      <Text
+                        style={[
+                          styles.documentCaption,
+                          { color: colors.text },
+                        ]}>
+                        {getDocumentTypeName(scannedDocument.type)}
+                      </Text>
+                      <Text
+                        style={[styles.documentName, { color: colors.hint }]}>
+                        {scannedDocument.name}
+                      </Text>
                     </View>
                   )}
                 </View>
-              )}
-            </Pressable>
 
-            {scannedImage && (
-              <View style={styles.chatContainer}>
-                {isAnalyzing ? (
-                  <View style={styles.analyzingContainer}>
-                    <Ionicons
-                      name="scan-outline"
-                      size={24}
-                      color={colors.accent}
-                    />
-                    <Text
-                      style={[styles.analyzingText, { color: colors.text }]}>
-                      Analyzing document...
-                    </Text>
-                  </View>
-                ) : (
-                  <>
-                    <View style={styles.messagesContainer}>
-                      {messages.map((message) => (
-                        <View
-                          key={message.id}
-                          style={[
-                            styles.messageWrapper,
-                            !message.isBot && styles.userMessageWrapper,
-                          ]}>
-                          {message.isBot && (
-                            <View
-                              style={[
-                                styles.avatarContainer,
-                                { backgroundColor: colors.accent },
-                              ]}>
-                              <Ionicons
-                                name="shield-half-outline"
-                                size={20}
-                                color={"white"}
-                              />
-                            </View>
-                          )}
-                          <View
-                            style={[
-                              styles.messageBubble,
-                              { backgroundColor: colors.background },
-                              !message.isBot && {
-                                backgroundColor: colors.accent,
-                              },
-                              message.isTyping && { opacity: 0.7 },
-                            ]}>
-                            <Text
-                              style={[
-                                styles.messageText,
-                                {
-                                  color: message.isBot ? colors.text : "white",
-                                },
-                              ]}>
-                              {message.text}
-                            </Text>
-                          </View>
-                        </View>
-                      ))}
-                    </View>
-                  </>
-                )}
+                <TouchableOpacity style={styles.clearButton}>
+                  <Text
+                    style={[styles.clearButtonText, { color: colors.warning }]}
+                    onPress={handleDeleteDocument}>
+                    Delete
+                  </Text>
+                  <Text
+                    style={[styles.clearButtonText, { color: colors.success }]}
+                    onPress={handleSaveDocument}>
+                    Continue
+                  </Text>
+                </TouchableOpacity>
               </View>
             )}
-          </ThemedCard>
 
-          <ThemedButton
-            title="Save"
-            onPress={() => {
-              console.log("Save");
-            }}
-          />
+            {/* Connection Status */}
+            {scannedDocument && (
+              <View style={styles.statusContainer}>
+                <View
+                  style={[
+                    styles.statusIndicator,
+                    {
+                      backgroundColor: isUploading
+                        ? "#ffaa00"
+                        : isConnected
+                        ? "#44ff44"
+                        : "#ff4444",
+                    },
+                  ]}
+                />
+                <Text style={[styles.statusText, { color: colors.text }]}>
+                  {isUploading
+                    ? "Uploading document..."
+                    : isConnecting
+                    ? "Connecting..."
+                    : !isConnected
+                    ? "Disconnected"
+                    : "Connected"}
+                </Text>
+              </View>
+            )}
+
+            {/* Chat Messages */}
+            {scannedDocument && chatId && isConnected && (
+              <View style={styles.chatContainer}>
+                <View style={styles.messagesContainer}>
+                  {messages.map((message) => (
+                    <View
+                      key={message.id}
+                      style={[
+                        styles.messageWrapper,
+                        !message.isBot && styles.userMessageWrapper,
+                      ]}>
+                      <View
+                        style={[
+                          styles.messageBubble,
+                          { backgroundColor: colors.card },
+                          !message.isBot && {
+                            backgroundColor: colors.userAccent,
+                          },
+                          message.isTyping && { opacity: 0.7 },
+                        ]}>
+                        <Text
+                          style={[styles.messageText, { color: colors.text }]}>
+                          {message.text}
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+          </View>
         </ScrollView>
-        {scannedImage && !isAnalyzing && (
+
+        {/* Input for additional questions */}
+        {scannedDocument && chatId && !isUploading && isConnected && (
           <KeyboardAvoidingView
             behavior={Platform.OS === "ios" ? "padding" : "height"}
             style={styles.inputContainer}>
@@ -524,7 +486,7 @@ const ScanScreen = () => {
               ]}>
               <TextInput
                 style={[styles.input, { color: colors.text }]}
-                placeholder="Your conversations are confidential and protected"
+                placeholder="Ask questions about your document..."
                 placeholderTextColor={colors.hint}
                 value={inputText}
                 onChangeText={setInputText}
@@ -533,12 +495,14 @@ const ScanScreen = () => {
               <TouchableOpacity
                 style={styles.sendButton}
                 onPress={handleSendMessage}
-                disabled={inputText.trim() === "" || isLoading}>
+                disabled={inputText.trim() === "" || !isConnected || isTyping}>
                 <Ionicons
                   name="send"
                   size={20}
                   color={
-                    inputText.trim() && !isLoading ? colors.accent : colors.hint
+                    inputText.trim() && isConnected && !isTyping
+                      ? colors.accent
+                      : colors.hint
                   }
                 />
               </TouchableOpacity>
@@ -573,25 +537,8 @@ const styles = StyleSheet.create({
     marginVertical: 16,
     paddingHorizontal: 16,
   },
-  scanCardWithDocument: {
-    minHeight: 200,
-  },
   scanCardContentPressed: {
     borderWidth: 2,
-  },
-  imagePreviewContainer: {
-    marginTop: 16,
-    alignItems: "center",
-  },
-  clearButton: {
-    marginTop: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: "rgba(0,0,0,0.1)",
-  },
-  clearButtonText: {
-    fontSize: 14,
   },
   documentContainer: {
     alignItems: "center",
@@ -615,24 +562,50 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "500",
   },
+  documentName: {
+    marginTop: 4,
+    fontSize: 12,
+    textAlign: "center",
+  },
+  clearButton: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 16,
+    width: "100%",
+    marginTop: 16,
+    borderRadius: 8,
+    backgroundColor: "rgba(0,0,0,0.1)",
+  },
+  clearButtonText: {
+    fontSize: 14,
+    flex: 1,
+    textAlign: "center",
+    fontWeight: "bold",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  statusContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  statusIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 8,
+  },
+  statusText: {
+    fontSize: 12,
+    opacity: 0.7,
+  },
   chatContainer: {
     marginTop: 16,
     borderRadius: 10,
-    minHeight: 300,
-  },
-  analyzingContainer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  analyzingText: {
-    marginLeft: 8,
-    fontSize: 16,
-    fontWeight: "500",
+    minHeight: 200,
   },
   messagesContainer: {
-    minHeight: 220,
     paddingHorizontal: 10,
   },
   messageWrapper: {
@@ -643,18 +616,10 @@ const styles = StyleSheet.create({
   userMessageWrapper: {
     justifyContent: "flex-end",
   },
-  avatarContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 10,
-  },
   messageBubble: {
-    maxWidth: "85%",
+    maxWidth: "95%",
     borderRadius: 16,
-    padding: 12,
+    padding: 16,
     borderBottomLeftRadius: 4,
   },
   messageText: {

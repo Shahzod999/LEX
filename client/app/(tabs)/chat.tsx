@@ -409,14 +409,6 @@ const styles = StyleSheet.create({
   userMessageWrapper: {
     justifyContent: "flex-end",
   },
-  avatarContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 10,
-  },
   messageBubble: {
     maxWidth: "95%",
     borderRadius: 16,
