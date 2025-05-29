@@ -1,9 +1,10 @@
 interface WebSocketMessage {
-  type: "message" | "join_chat" | "create_chat";
+  type: "message" | "join_chat" | "create_chat" | "switch_chat";
   data: {
     message?: string;
     chatId?: string;
     token?: string;
+    chatType?: "documents" | "messages";
   };
 }
 
@@ -13,6 +14,7 @@ interface WebSocketResponse {
     | "authenticated" 
     | "chat_joined"
     | "chat_created"
+    | "chat_switched"
     | "user_message"
     | "assistant_message_start"
     | "assistant_message_token"
@@ -25,6 +27,7 @@ export class WebSocketChatService {
   private socket: WebSocket | null = null;
   private token: string;
   private chatId: string | null = null;
+  private chatType: "documents" | "messages" = "messages";
   private messageHandlers: Map<string, (data: any) => void> = new Map();
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
@@ -50,6 +53,7 @@ export class WebSocketChatService {
             data: {
               token: this.token,
               chatId: this.chatId || undefined,
+              chatType: this.chatType,
             },
           });
           
@@ -97,11 +101,18 @@ export class WebSocketChatService {
         break;
       case "chat_joined":
         this.chatId = response.data.chatId;
-        console.log("Joined chat:", response.data.chatId);
+        this.chatType = response.data.chatType || "messages";
+        console.log("Joined chat:", response.data.chatId, "type:", this.chatType);
         break;
       case "chat_created":
         this.chatId = response.data.chatId;
-        console.log("Chat created:", response.data.chatId);
+        this.chatType = response.data.chatType || "messages";
+        console.log("Chat created:", response.data.chatId, "type:", this.chatType);
+        break;
+      case "chat_switched":
+        this.chatId = response.data.chatId;
+        this.chatType = response.data.chatType || "messages";
+        console.log("Switched to chat:", response.data.chatId, "type:", this.chatType);
         break;
       case "error":
         console.error("WebSocket error:", response.data.message);
@@ -122,22 +133,38 @@ export class WebSocketChatService {
     }
   }
 
-  joinChat(chatId: string) {
+  joinChat(chatId: string, chatType: "documents" | "messages" = "messages") {
     this.chatId = chatId;
+    this.chatType = chatType;
     this.send({
       type: "join_chat",
       data: {
         token: this.token,
         chatId,
+        chatType,
       },
     });
   }
 
-  createChat() {
+  createChat(chatType: "documents" | "messages" = "messages") {
+    this.chatType = chatType;
     this.send({
       type: "create_chat",
       data: {
         token: this.token,
+        chatType,
+      },
+    });
+  }
+
+  switchChat(chatId: string, chatType: "documents" | "messages" = "messages") {
+    this.chatId = chatId;
+    this.chatType = chatType;
+    this.send({
+      type: "switch_chat",
+      data: {
+        chatId,
+        chatType,
       },
     });
   }
@@ -189,6 +216,10 @@ export class WebSocketChatService {
 
   getCurrentChatId(): string | null {
     return this.chatId;
+  }
+
+  getCurrentChatType(): "documents" | "messages" {
+    return this.chatType;
   }
 }
 

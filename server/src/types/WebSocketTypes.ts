@@ -1,18 +1,20 @@
 export interface WebSocketMessage {
-  type: "message" | "join_chat" | "create_chat";
+  type: "message" | "join_chat" | "create_chat" | "switch_chat";
   data: {
     message?: string;
     chatId?: string;
     token?: string;
+    chatType?: "documents" | "messages";
   };
 }
 
 export interface WebSocketResponse {
-  type: 
+  type:
     | "connected"
-    | "authenticated" 
+    | "authenticated"
     | "chat_joined"
     | "chat_created"
+    | "chat_switched"
     | "user_message"
     | "assistant_message_start"
     | "assistant_message_token"
@@ -26,4 +28,6 @@ export interface ChatMessage {
   content: string;
   role: "user" | "assistant";
   timestamp?: Date;
-} 
+}
+
+// shoha

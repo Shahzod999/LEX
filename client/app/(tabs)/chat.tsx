@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -15,10 +15,13 @@ import { PanGestureHandler, State } from "react-native-gesture-handler";
 import Header from "@/components/Card/Header";
 import ChatHistoryMenu from "@/components/ChatHistoryMenu";
 import { useTheme } from "@/context/ThemeContext";
-import { useAppSelector } from "@/hooks/reduxHooks";
+import { useChat } from "@/context/ChatContext";
+import {
+  useGetUserChatsQuery,
+  useGetUserOneChatQuery,
+} from "@/redux/api/endpoints/chatApiSlice";
 import { selectToken } from "@/redux/features/tokenSlice";
-import { useWebSocketChat } from "@/hooks/useWebSocketChat";
-import { useGetUserChatsQuery } from "@/redux/api/endpoints/chatApiSlice";
+import { useAppSelector } from "@/hooks/reduxHooks";
 
 // Define message interface
 interface Message {
@@ -26,200 +29,135 @@ interface Message {
   text: string;
   isBot: boolean;
   isTyping?: boolean;
-  isHelpful?: boolean | undefined;
   messageId?: string;
-  timestamp?: Date;
-}
-
-// WebSocket message interface
-interface ChatMessage {
-  messageId?: string;
-  content: string;
-  role: "user" | "assistant";
   timestamp?: Date;
 }
 
 const ChatScreen = () => {
   const { colors } = useTheme();
-  const token = useAppSelector(selectToken);
   const [inputText, setInputText] = useState("");
   const [chatHistoryVisible, setChatHistoryVisible] = useState(false);
-  const [connectionError, setConnectionError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
+  const token = useAppSelector(selectToken);
 
-  // Query for chat history to invalidate cache when needed
-  const { data: chatHistory, refetch: refetchChats } = useGetUserChatsQuery();
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 1,
-      text: "Hello! I'm your AI legal companion. How can I help you today with visa or migration questions?",
-      isBot: true,
-    },
-  ]);
-  const [hasLoadedInitialChat, setHasLoadedInitialChat] = useState(false);
-
-  // WebSocket chat integration
+  // Use the global chat context
   const {
     isConnected,
     isConnecting,
-    currentChatId,
-    isTyping,
-    streamingMessage,
+    messagesChat,
     sendMessage: sendWebSocketMessage,
     createChat,
     joinChat,
     connect,
-  } = useWebSocketChat({
-    token: token || "",
-    onMessage: useCallback(
-      (wsMessage: ChatMessage) => {
-        const newMessage: Message = {
-          id: Date.now(),
-          text: wsMessage.content,
-          isBot: wsMessage.role === "assistant",
-          messageId: wsMessage.messageId,
-          timestamp: wsMessage.timestamp,
-        };
+  } = useChat();
 
-        setMessages((prev) => {
-          // Remove typing indicator if it exists
-          const filteredMessages = prev.filter((m) => !m.isTyping);
-          return [...filteredMessages, newMessage];
-        });
+  // Query for chat data
+  const { data: chatHistory, refetch: refetchChats } = useGetUserChatsQuery();
+  const { data: currentChat, error: currentChatError, refetch: refetchCurrentChat } = useGetUserOneChatQuery(messagesChat.chatId || "");
 
-        // Reset sending state when we receive any message
-        setIsSending(false);
+  // Convert chat messages to UI format
+  const convertToUIMessages = (chatMessages: any[]): Message[] => {
+    if (!chatMessages) return [];
+    return chatMessages.map((msg, index) => ({
+      id: Date.now() + index,
+      text: msg.content,
+      isBot: msg.role === "assistant",
+      messageId: msg.messageId,
+      timestamp: msg.timestamp,
+    }));
+  };
 
-        // Refetch chats to update history when new messages are added
-        if (wsMessage.role === "assistant") {
-          refetchChats();
-        }
-      },
-      [refetchChats]
-    ),
-    onError: useCallback((error: string) => {
-      console.error("WebSocket error:", error);
-      setConnectionError(error);
-      setIsSending(false); // Reset sending state on error
-      // Clear error after 5 seconds
-      setTimeout(() => setConnectionError(null), 5000);
-    }, []),
-    onChatJoined: useCallback(
-      (data: { chatId: string; messages: any[]; title: string }) => {
-        console.log("Chat joined with history:", data);
+  // Get messages from currentChat or fallback to messagesChat
+  const getDisplayMessages = (): Message[] => {
+    // If there's an error fetching current chat, use context data
+    if (currentChatError) {
+      console.warn("Error fetching current chat, using context data:", currentChatError);
+      if (messagesChat.messages) {
+        return convertToUIMessages(messagesChat.messages);
+      }
+      return [];
+    }
 
-        // Convert server messages to UI format
-        const historyMessages: Message[] = data.messages.map(
-          (msg: any, index: number) => ({
-            id: Date.now() + index,
-            text: msg.content,
-            isBot: msg.role === "assistant",
-            messageId: msg._id,
-            timestamp: new Date(msg.createdAt),
-          })
-        );
+    // Use currentChat data if available
+    if (currentChat?.messages) {
+      return convertToUIMessages(currentChat.messages);
+    }
+    
+    // Fallback to messagesChat from context
+    if (messagesChat.messages) {
+      return convertToUIMessages(messagesChat.messages);
+    }
+    
+    return [];
+  };
 
-        // Set messages from history, or show welcome message if no history
-        if (historyMessages.length === 0) {
-          setMessages([
-            {
-              id: 1,
-              text: "Hello! I'm your AI legal companion. How can I help you today with visa or migration questions?",
-              isBot: true,
-            },
-          ]);
-        } else {
-          setMessages(historyMessages);
-        }
-      },
-      []
-    ),
-    onChatCreated: useCallback(
-      (data: { chatId: string; title: string }) => {
-        console.log("New chat created:", data);
-        // Refetch chats to update history
-        refetchChats();
-      },
-      [refetchChats]
-    ),
-  });
+  const displayMessages = getDisplayMessages();
+  const isTyping = messagesChat.isTyping;
+  const streamingMessage = messagesChat.streamingMessage;
 
   // Auto-connect when token is available
   useEffect(() => {
     if (token && !isConnected && !isConnecting) {
-      setConnectionError(null);
       connect();
     }
   }, [token, isConnected, isConnecting, connect]);
 
-  // Load last chat or create new one
+  // Check if current chat still exists, if not - switch to available chat or create new
   useEffect(() => {
-    if (isConnected && !currentChatId && !hasLoadedInitialChat && chatHistory) {
-      setHasLoadedInitialChat(true);
-
-      if (chatHistory.length > 0) {
-        // Join the most recent chat
-        const lastChat = chatHistory[0]; // Assuming chats are sorted by most recent first
-        console.log("Joining last chat:", lastChat._id);
-        joinChat(lastChat._id);
-      } else {
-        // Create new chat if no history exists
-        console.log("No chat history, creating new chat");
-        createChat();
+    if (isConnected && messagesChat.chatId && chatHistory) {
+      const messageChats = chatHistory.filter(
+        (chat) => !chat.sourceType || chat.sourceType === "manual"
+      );
+      
+      // Check if current chat exists in the list
+      const currentChatExists = messageChats.some(chat => chat._id === messagesChat.chatId);
+      
+      if (!currentChatExists) {
+        console.log("Current chat no longer exists, switching to available chat or creating new one");
+        
+        if (messageChats.length > 0) {
+          // Switch to the first available chat
+          joinChat(messageChats[0]._id, "messages");
+        } else {
+          // No chats available, create a new one
+          createChat("messages");
+        }
       }
     }
-  }, [
-    isConnected,
-    currentChatId,
-    hasLoadedInitialChat,
-    chatHistory,
-    joinChat,
-    createChat,
-  ]);
+  }, [isConnected, messagesChat.chatId, chatHistory, joinChat, createChat]);
 
-  // Handle streaming message display
+  // Load last chat or create new one
   useEffect(() => {
-    if (isTyping && streamingMessage) {
-      setMessages((prev) => {
-        const filteredMessages = prev.filter((m) => !m.isTyping);
-        const typingMessage: Message = {
-          id: Date.now(),
-          text: streamingMessage,
-          isBot: true,
-          isTyping: true,
-        };
-        return [...filteredMessages, typingMessage];
-      });
-    } else if (!isTyping) {
-      // Remove typing indicator when streaming is complete
-      setMessages((prev) => prev.filter((m) => !m.isTyping));
+    if (isConnected && !messagesChat.chatId && chatHistory) {
+      const messageChats = chatHistory.filter(
+        (chat) => !chat.sourceType || chat.sourceType === "manual"
+      );
+
+      if (messageChats.length > 0) {
+        joinChat(messageChats[0]._id, "messages");
+      } else {
+        createChat("messages");
+      }
     }
-  }, [isTyping, streamingMessage]);
+  }, [isConnected, messagesChat.chatId, chatHistory, joinChat, createChat]);
 
   const handleSendMessage = async () => {
     if (inputText.trim() === "" || !isConnected || isSending) return;
 
     setIsSending(true);
-
-    // Send message via WebSocket
-    sendWebSocketMessage(inputText);
+    sendWebSocketMessage(inputText, "messages");
     setInputText("");
-
-    // Add typing indicator
-    const typingIndicator: Message = {
-      id: Date.now() + 1,
-      text: "Thinking...",
-      isBot: true,
-      isTyping: true,
-    };
-    setMessages((prev) => [...prev, typingIndicator]);
+    
+    // Refetch current chat to get updated messages
+    setTimeout(() => {
+      refetchCurrentChat();
+      setIsSending(false);
+    }, 1000);
   };
 
   const handleSwipeGesture = (event: any) => {
     if (event.nativeEvent.state === State.END) {
       const { translationX, velocityX } = event.nativeEvent;
-
-      // Swipe right to open chat history
       if (translationX > 50 && velocityX > 0) {
         setChatHistoryVisible(true);
       }
@@ -231,47 +169,61 @@ const ChatScreen = () => {
   };
 
   const handleSelectChat = (chatId: string) => {
-    console.log("Selected chat:", chatId);
     if (isConnected) {
-      // Clear current messages before joining new chat
-      setMessages([]);
-      setIsSending(false); // Reset sending state
-      joinChat(chatId);
+      setIsSending(false);
+      joinChat(chatId, "messages");
+      refetchCurrentChat();
     }
   };
 
   const handleCreateNewChat = () => {
-    console.log("Creating new chat");
     if (isConnected) {
-      // Clear current messages and create new chat
-      setMessages([
-        {
-          id: 1,
-          text: "Hello! I'm your AI legal companion. How can I help you today with visa or migration questions?",
-          isBot: true,
-        },
-      ]);
-      setIsSending(false); // Reset sending state
-      createChat();
+      setIsSending(false);
+      createChat("messages");
+      // Refetch chat history to include the new chat
+      setTimeout(() => {
+        refetchChats();
+        refetchCurrentChat();
+      }, 500);
     }
   };
 
-  // Connection status indicator
+  // Connection status
   const getConnectionStatus = () => {
-    if (connectionError) return `Error: ${connectionError}`;
     if (isConnecting) return "Connecting...";
     if (!isConnected) return "Disconnected";
-    if (!currentChatId) return "Creating chat...";
+    if (!messagesChat.chatId) return "Creating chat...";
     return "Connected";
   };
 
   const getConnectionColor = () => {
-    if (connectionError) return "#ff4444";
     if (isConnecting) return "#ffaa00";
     if (!isConnected) return "#ff4444";
-    if (!currentChatId) return "#ffaa00";
+    if (!messagesChat.chatId) return "#ffaa00";
     return "#44ff44";
   };
+
+  // Prepare final messages for display
+  const finalMessages = [...displayMessages];
+
+  // Add welcome message if no messages
+  if (finalMessages.length === 0) {
+    finalMessages.push({
+      id: 1,
+      text: "Hello! I'm your AI legal companion. How can I help you today with visa or migration questions?",
+      isBot: true,
+    });
+  }
+
+  // Add streaming message if typing
+  if (isTyping && streamingMessage) {
+    finalMessages.push({
+      id: Date.now(),
+      text: streamingMessage,
+      isBot: true,
+      isTyping: true,
+    });
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -299,7 +251,7 @@ const ChatScreen = () => {
             </View>
 
             <View style={styles.chatContainer}>
-              {messages.map((message, index) => (
+              {finalMessages.map((message, index) => (
                 <View
                   key={message.id + index}
                   style={[
@@ -423,7 +375,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 22,
   },
-
   feedbackContainer: {
     flexDirection: "row",
     marginTop: 12,

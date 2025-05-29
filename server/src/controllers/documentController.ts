@@ -68,6 +68,7 @@ export const uploadDocument = asyncHandler(
     const language = req.body.language || "English";
     const fileUrls: string[] = [];
     const messages = [];
+    const allFileContents: { fileName: string; content: string; fileType: string }[] = [];
 
     // Create user-specific directory structure
     const userUploadsDir = path.join("uploads", req.user.userId.toString(), "docs");
@@ -84,12 +85,13 @@ export const uploadDocument = asyncHandler(
     });
 
     const systemMessage = await Message.create({
-      content: "I will analyze the documents and provide insights.",
+      content: "I will analyze all your documents together and provide comprehensive insights.",
       role: "assistant",
     });
 
     messages.push(systemMessage);
 
+    // Process all files and extract content
     for (const file of req.files) {
       const fileType = path.extname(file.originalname).toLowerCase();
       const newFileName = `${Date.now()}-${file.originalname}`;
@@ -99,53 +101,68 @@ export const uploadDocument = asyncHandler(
       fs.renameSync(file.path, newFilePath);
       fileUrls.push(newFilePath);
 
+      // Extract content from file
       const fileContent = await extractText(newFilePath, fileType);
-
-      const userPrompt = `Please analyze this ${fileType} file. Here's the content:\n\n${fileContent}\n\nReply in: ${language}`;
-      const userMessage = await Message.create({
-        role: "user",
-        content: file.originalname,
+      allFileContents.push({
+        fileName: file.originalname,
+        content: fileContent,
+        fileType: fileType
       });
-
-      messages.push(userMessage);
-
-      let assistantMessageContent = "I'll analyze this file for you.";
-      try {
-        const completion = await openai.chat.completions.create({
-          messages: [
-            {
-              role: "system",
-              content: `You are a document analysis assistant. Analyze the provided ${fileType} file and give insights in:\n${language}`,
-            },
-            {
-              role: "user",
-              content: userPrompt,
-            },
-          ],
-          model: "gpt-4o",
-        });
-
-        assistantMessageContent = completion.choices[0].message.content || "";
-      } catch (error) {
-        console.error("OpenAI error:", error);
-      }
-
-      const assistantMessage = await Message.create({
-        content: assistantMessageContent,
-        role: "assistant",
-      });
-
-      messages.push(assistantMessage);
-
-      chat.messages.push(userMessage._id, assistantMessage._id);
     }
 
-    chat.messages.unshift(systemMessage._id);
+    // Create a single user message listing all uploaded files
+    const filesList = allFileContents.map(file => file.fileName).join(", ");
+    const userMessage = await Message.create({
+      role: "user",
+      content: `Uploaded documents: ${filesList}`,
+    });
+
+    messages.push(userMessage);
+
+    // Create combined prompt for all files
+    const combinedContent = allFileContents.map(file => 
+      `=== ${file.fileName} (${file.fileType}) ===\n${file.content}\n\n`
+    ).join("");
+
+    const combinedPrompt = `Please analyze these ${allFileContents.length} documents together and provide a comprehensive analysis. Here are the documents:\n\n${combinedContent}\n\nPlease provide:\n1. A summary of each document\n2. Key insights and findings\n3. Connections or relationships between the documents\n4. Overall analysis and recommendations\n\nReply in: ${language}`;
+
+    let assistantMessageContent = "I'll analyze all your documents together.";
+    try {
+      const completion = await openai.chat.completions.create({
+        messages: [
+          {
+            role: "system",
+            content: `You are a comprehensive document analysis assistant. Analyze multiple documents together and provide detailed insights, summaries, and connections between them. Always respond in: ${language}`,
+          },
+          {
+            role: "user",
+            content: combinedPrompt,
+          },
+        ],
+        model: "gpt-4o",
+        max_tokens: 4000, // Увеличиваем лимит токенов для более подробного анализа
+      });
+
+      assistantMessageContent = completion.choices[0].message.content || "";
+    } catch (error) {
+      console.error("OpenAI error:", error);
+      assistantMessageContent = "Sorry, I encountered an error while analyzing your documents. Please try again.";
+    }
+
+    const assistantMessage = await Message.create({
+      content: assistantMessageContent,
+      role: "assistant",
+    });
+
+    messages.push(assistantMessage);
+
+    // Add messages to chat
+    chat.messages.push(systemMessage._id, userMessage._id, assistantMessage._id);
     await chat.save();
 
     const document = await Document.create({
       userId: req.user.userId,
-      title: req.body.title || "Multiple Documents",
+      title: req.body.title || `Analysis of ${allFileContents.length} Documents`,
       filesUrl: fileUrls,
       chatId: chat._id,
     });

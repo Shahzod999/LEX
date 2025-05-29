@@ -42,7 +42,7 @@ export default function ChatHistoryMenu({
   const menuWidth = screenWidth * 0.85;
   const slideAnim = useRef(new Animated.Value(-menuWidth)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const { data: chatHistory, isLoading } = useGetUserChatsQuery();
+  const { data: chatHistory, isLoading, refetch } = useGetUserChatsQuery();
   const [deleteChat, { isLoading: isDeleting }] = useDeleteChatMutation();
 
   useEffect(() => {
@@ -82,6 +82,7 @@ export default function ChatHistoryMenu({
   };
 
   const handleCreateNewChat = () => {
+    refetch();
     onCreateNewChat?.();
     onClose();
   };

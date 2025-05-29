@@ -18,6 +18,7 @@ export const chatApiSlice = apiSlice.injectEndpoints({
       query: (chatId) => ({
         url: `/chat/${chatId}`,
       }),
+      providesTags: ["Chat"],
     }),
 
     sendMessage: builder.mutation<ChatResponseType, Message>({

@@ -10,42 +10,47 @@ import {
   ScrollView,
   TouchableOpacity,
   SafeAreaView,
+  Alert,
 } from "react-native";
 import React, { useState, useCallback } from "react";
 import Header from "@/components/Card/Header";
 import ToggleTabsRN from "@/components/ToggleTabs/ToggleTabsRN";
 import HomeCard from "@/components/Card/HomeCard";
 import { useTheme } from "@/context/ThemeContext";
+import { useChat } from "@/context/ChatContext";
 import { Ionicons } from "@expo/vector-icons";
 import CameraView from "@/components/Camera/CameraView";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
 import { useAppSelector } from "@/hooks/reduxHooks";
 import { selectToken } from "@/redux/features/tokenSlice";
-import { useWebSocketChat } from "@/hooks/useWebSocketChat";
 import {
   useDeleteDocumentMutation,
   useUploadDocumentMutation,
 } from "@/redux/api/endpoints/documentApiSlice";
 import { Loading } from "@/components/LoadingScreen";
 
-// WebSocket message interface
-interface ChatMessage {
-  messageId?: string;
-  content: string;
-  role: "user" | "assistant";
-  timestamp?: Date;
-}
-
 // UI message interface
 interface Message {
-  id: number;
+  id: string;
   text: string;
   isBot: boolean;
   isTyping?: boolean;
   messageId?: string;
   timestamp?: Date;
 }
+
+// Document interface
+interface ScannedDocument {
+  id: string;
+  uri: string;
+  type: string;
+  name?: string;
+  documentId?: string;
+}
+
+// Add a counter for unique IDs
+let documentCounter = 0;
 
 const tabs = [
   { id: "1", label: "Scan", type: "scan" },
@@ -57,65 +62,44 @@ const ScanScreen = () => {
   const token = useAppSelector(selectToken);
   const [activeTab, setActiveTab] = useState<string>("1");
   const [showCamera, setShowCamera] = useState(false);
-  const [scannedDocument, setScannedDocument] = useState<{
-    uri: string;
-    type: string;
-    name?: string;
-  } | null>(null);
+  const [scannedDocuments, setScannedDocuments] = useState<ScannedDocument[]>(
+    []
+  );
   const [inputText, setInputText] = useState("");
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [documentId, setDocumentId] = useState<string | null>(null);
-  const [chatId, setChatId] = useState<string | null>(null);
+  const [documentIds, setDocumentIds] = useState<string[]>([]);
+  const [isAnalyzed, setIsAnalyzed] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<string>("");
+
   const [uploadDocument, { isLoading: isUploading }] =
     useUploadDocumentMutation();
   const [deleteDocument, { isLoading: isDeleting }] =
     useDeleteDocumentMutation();
 
-  console.log(chatId, "scan");
-
-  // WebSocket chat integration
+  // Use the global chat context
   const {
     isConnected,
     isConnecting,
-    isTyping,
-    streamingMessage,
+    documentsChat,
     sendMessage: sendWebSocketMessage,
     joinChat,
-  } = useWebSocketChat({
-    token: token || "",
-    onMessage: useCallback((wsMessage: ChatMessage) => {
-      const newMessage: Message = {
-        id: Date.now(),
-        text: wsMessage.content,
-        isBot: wsMessage.role === "assistant",
-        messageId: wsMessage.messageId,
-        timestamp: wsMessage.timestamp,
-      };
+  } = useChat();
 
-      setMessages((prev) => {
-        const filteredMessages = prev.filter((m) => !m.isTyping);
-        return [...filteredMessages, newMessage];
-      });
-    }, []),
-    onError: useCallback((error: string) => {
-      console.error("WebSocket error:", error);
-    }, []),
-    onChatJoined: useCallback(
-      (data: { chatId: string; messages: any[]; title: string }) => {
-        const historyMessages: Message[] = data.messages.map(
-          (msg: any, index: number) => ({
-            id: Date.now() + index,
-            text: msg.content,
-            isBot: msg.role === "assistant",
-            messageId: msg._id,
-            timestamp: new Date(msg.createdAt),
-          })
-        );
-        setMessages(historyMessages);
-      },
-      []
-    ),
-  });
+  // Convert chat messages to UI format
+  const convertToUIMessages = (chatMessages: any[]): Message[] => {
+    return chatMessages.map((msg, index) => ({
+      id: `msg_${Date.now()}_${index}_${Math.random()}`,
+      text: msg.content,
+      isBot: msg.role === "assistant",
+      messageId: msg.messageId,
+      timestamp: msg.timestamp,
+    }));
+  };
+
+  // Get current messages and state for documents chat
+  const currentMessages = convertToUIMessages(documentsChat.messages);
+  const isTyping = documentsChat.isTyping;
+  const streamingMessage = documentsChat.streamingMessage;
+  const currentChatId = documentsChat.chatId;
 
   const sanitizeFileName = (
     fileName: string,
@@ -137,30 +121,12 @@ const ScanScreen = () => {
     return `${sanitized}_${Date.now()}${extension}`;
   };
 
-  // Handle streaming message display
-  React.useEffect(() => {
-    if (isTyping && streamingMessage) {
-      setMessages((prev) => {
-        const filteredMessages = prev.filter((m) => !m.isTyping);
-        const typingMessage: Message = {
-          id: Date.now(),
-          text: streamingMessage,
-          isBot: true,
-          isTyping: true,
-        };
-        return [...filteredMessages, typingMessage];
-      });
-    } else if (!isTyping) {
-      setMessages((prev) => prev.filter((m) => !m.isTyping));
-    }
-  }, [isTyping, streamingMessage]);
-
   const handleDocumentUpload = async (
     documentUri: string,
     documentType: string,
     fileName?: string
   ) => {
-    if (!token) return;
+    if (!token) return null;
 
     try {
       const formData = new FormData();
@@ -179,15 +145,127 @@ const ScanScreen = () => {
 
       const response = await uploadDocument(formData).unwrap();
 
-      if (response.chat?._id) {
-        setChatId(response.chat._id);
-        setDocumentId(response.document._id);
+      if (response.chat?._id && response.document?._id) {
+        // If this is the first document, set up the documents chat
+        if (!currentChatId) {
+          joinChat(response.chat._id, "documents");
+        }
 
-        // Join the chat after successful upload
-        joinChat(response.chat._id);
+        return response.document._id;
       }
+      return null;
     } catch (error) {
       console.error("Error uploading document:", error);
+      return null;
+    }
+  };
+
+  // Новая функция для массовой загрузки документов
+  const handleMultipleDocumentsUpload = async (documents: ScannedDocument[]) => {
+    if (!token || documents.length === 0) return null;
+
+    try {
+      setUploadProgress(`Preparing ${documents.length} document(s) for upload...`);
+      
+      const formData = new FormData();
+      
+      // Добавляем все файлы в один FormData
+      documents.forEach((document, index) => {
+        setUploadProgress(`Processing document ${index + 1} of ${documents.length}...`);
+        
+        const sanitizedFileName = sanitizeFileName(
+          document.name || `document_${Date.now()}_${index}`
+        );
+
+        formData.append("files", {
+          uri: document.uri,
+          type: document.type,
+          name: sanitizedFileName,
+        } as any);
+      });
+
+      // Создаем заголовок для множественных документов
+      const documentNames = documents.map(doc => 
+        doc.name || getDocumentTypeName(doc.type)
+      ).join(", ");
+      
+      formData.append("title", `Multiple Documents Analysis - ${documentNames}`);
+      formData.append("language", "Russian");
+
+      setUploadProgress("Uploading and analyzing documents...");
+      const response = await uploadDocument(formData).unwrap();
+
+      if (response.chat?._id && response.document?._id) {
+        setUploadProgress("Connecting to chat...");
+        
+        // Подключаемся к чату с документами
+        if (!currentChatId) {
+          joinChat(response.chat._id, "documents");
+        }
+
+        setUploadProgress("Upload completed successfully!");
+        setTimeout(() => setUploadProgress(""), 2000);
+
+        return {
+          documentId: response.document._id,
+          chatId: response.chat._id,
+          filesUrl: response.document.filesUrl || []
+        };
+      }
+      return null;
+    } catch (error) {
+      console.error("Error uploading multiple documents:", error);
+      setUploadProgress("Upload failed. Please try again.");
+      setTimeout(() => setUploadProgress(""), 3000);
+      return null;
+    }
+  };
+
+  const addDocument = (uri: string, type: string, name?: string) => {
+    // Use a combination of timestamp and counter for unique IDs
+    documentCounter += 1;
+    const newDocument: ScannedDocument = {
+      id: `doc_${Date.now()}_${documentCounter}`,
+      uri,
+      type,
+      name,
+    };
+
+    setScannedDocuments((prev) => [...prev, newDocument]);
+  };
+
+  const handleAnalyzeDocuments = async () => {
+    if (scannedDocuments.length === 0) return;
+
+    try {
+      // Фильтруем документы, которые еще не загружены
+      const documentsToUpload = scannedDocuments.filter(doc => !doc.documentId);
+      
+      if (documentsToUpload.length > 0) {
+        // Загружаем все документы одновременно
+        const uploadResult = await handleMultipleDocumentsUpload(documentsToUpload);
+        
+        if (uploadResult) {
+          // Обновляем все документы с одним documentId (так как они все в одном документе)
+          const updatedDocuments = scannedDocuments.map(doc => ({
+            ...doc,
+            documentId: uploadResult.documentId
+          }));
+          
+          setScannedDocuments(updatedDocuments);
+          setDocumentIds([uploadResult.documentId]);
+        }
+      } else {
+        // Если все документы уже загружены, просто используем существующие ID
+        const existingIds = scannedDocuments
+          .map(doc => doc.documentId)
+          .filter(Boolean) as string[];
+        setDocumentIds(existingIds);
+      }
+
+      setIsAnalyzed(true);
+    } catch (error) {
+      console.error("Error analyzing documents:", error);
     }
   };
 
@@ -202,47 +280,41 @@ const ScanScreen = () => {
           mediaTypes: ImagePicker.MediaTypeOptions.Images,
           allowsEditing: true,
           quality: 0.8,
+          allowsMultipleSelection: true,
         });
 
-        if (!result.canceled && result.assets?.[0]?.uri) {
-          const asset = result.assets[0];
-          const sanitizedFileName = sanitizeFileName(`image_${Date.now()}.jpg`);
-          setScannedDocument({
-            uri: asset.uri,
-            type: "image/jpeg",
-            name: sanitizedFileName,
-          });
-          await handleDocumentUpload(
-            asset.uri,
-            "image/jpeg",
-            sanitizedFileName
-          );
+        if (!result.canceled && result.assets) {
+          for (const asset of result.assets) {
+            if (asset.uri) {
+              const sanitizedFileName = sanitizeFileName(
+                `image_${Date.now()}.jpg`
+              );
+              addDocument(asset.uri, "image/jpeg", sanitizedFileName);
+            }
+          }
         }
       } else {
         const result = await DocumentPicker.getDocumentAsync({
           type: "*/*",
           copyToCacheDirectory: true,
+          multiple: true,
         });
 
-        if (!result.canceled && result.assets?.[0]) {
-          const asset = result.assets[0];
-          const sanitizedFileName = sanitizeFileName(
-            asset.name || `document_${Date.now()}`
-          );
-          setScannedDocument({
-            uri: asset.uri,
-            type: asset.mimeType || "application/octet-stream",
-            name: sanitizedFileName,
-          });
-          await handleDocumentUpload(
-            asset.uri,
-            asset.mimeType || "application/octet-stream",
-            sanitizedFileName
-          );
+        if (!result.canceled && result.assets) {
+          for (const asset of result.assets) {
+            const sanitizedFileName = sanitizeFileName(
+              asset.name || `document_${Date.now()}`
+            );
+            addDocument(
+              asset.uri,
+              asset.mimeType || "application/octet-stream",
+              sanitizedFileName
+            );
+          }
         }
       }
     } catch (error) {
-      console.error("Error picking document:", error);
+      console.error("Error picking documents:", error);
     }
   };
 
@@ -252,53 +324,91 @@ const ScanScreen = () => {
       setShowCamera(false);
 
       const sanitizedFileName = sanitizeFileName(`scanned_${Date.now()}.jpg`);
-      setScannedDocument({
-        uri,
-        type: "image/jpeg",
-        name: sanitizedFileName,
-      });
-      try {
-        await handleDocumentUpload(uri, "image/jpeg", sanitizedFileName);
-      } catch (error) {
-        console.error("Error uploading document:", error);
-      }
+      addDocument(uri, "image/jpeg", sanitizedFileName);
     }
   };
 
   const handleSendMessage = () => {
-    if (inputText.trim() === "" || !isConnected || !chatId) return;
+    if (inputText.trim() === "" || !isConnected || !currentChatId) return;
 
-    sendWebSocketMessage(inputText);
+    // Send message to documents chat
+    sendWebSocketMessage(inputText, "documents");
     setInputText("");
-
-    const typingIndicator: Message = {
-      id: Date.now() + 1,
-      text: "Thinking...",
-      isBot: true,
-      isTyping: true,
-    };
-    setMessages((prev) => [...prev, typingIndicator]);
   };
 
-  const handleDeleteDocument = async () => {
-    if (documentId) {
+  const handleDeleteDocument = async (documentToDelete: ScannedDocument) => {
+    // Удаляем документ из локального состояния
+    const updatedDocuments = scannedDocuments.filter((doc) => doc.id !== documentToDelete.id);
+    setScannedDocuments(updatedDocuments);
+
+    // Если это был последний документ, сбрасываем состояние
+    if (updatedDocuments.length === 0) {
+      // Удаляем документ с сервера, если он был загружен
+      if (documentToDelete.documentId) {
+        try {
+          await deleteDocument(documentToDelete.documentId).unwrap();
+        } catch (error) {
+          console.log("Error deleting document from server:", error);
+        }
+      }
+      
+      setDocumentIds([]);
+      setIsAnalyzed(false);
+    } else if (isAnalyzed && documentToDelete.documentId) {
+      // Если документ уже был загружен и анализирован, нужно перезагрузить оставшиеся документы
+      // Сбрасываем состояние анализа, чтобы пользователь мог заново загрузить оставшиеся документы
+      const documentsWithoutIds = updatedDocuments.map(doc => ({
+        ...doc,
+        documentId: undefined
+      }));
+      setScannedDocuments(documentsWithoutIds);
+      setDocumentIds([]);
+      setIsAnalyzed(false);
+      
+      // Удаляем старый документ с сервера
       try {
-        await deleteDocument(documentId).unwrap();
-        setScannedDocument(null);
-        setMessages([]);
-        setDocumentId(null);
-        setChatId(null);
+        await deleteDocument(documentToDelete.documentId).unwrap();
       } catch (error) {
-        console.log(error);
+        console.log("Error deleting document from server:", error);
       }
     }
   };
 
-  const handleSaveDocument = () => {
-    setScannedDocument(null);
-    setMessages([]);
-    setDocumentId(null);
-    setChatId(null);
+  const handleDeleteAllDocuments = async () => {
+    Alert.alert(
+      "Delete All Documents",
+      "Are you sure you want to delete all documents?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              // Удаляем все документы с сервера
+              for (const docId of documentIds) {
+                if (docId) {
+                  await deleteDocument(docId).unwrap();
+                }
+              }
+              
+              // Сбрасываем локальное состояние
+              setScannedDocuments([]);
+              setDocumentIds([]);
+              setIsAnalyzed(false);
+            } catch (error) {
+              console.log("Error deleting documents:", error);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleSaveDocuments = () => {
+    setScannedDocuments([]);
+    setDocumentIds([]);
+    setIsAnalyzed(false);
   };
 
   const getDocumentIcon = (type: string) => {
@@ -321,6 +431,19 @@ const ScanScreen = () => {
     return <CameraView onPhotoTaken={handlePhotoTaken} />;
   }
 
+  // Prepare messages for display
+  const displayMessages = [...currentMessages];
+
+  // Add streaming message if typing
+  if (isTyping && streamingMessage) {
+    displayMessages.push({
+      id: `typing_${Date.now()}_${Math.random()}`,
+      text: streamingMessage,
+      isBot: true,
+      isTyping: true,
+    });
+  }
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {isDeleting && <Loading />}
@@ -334,7 +457,7 @@ const ScanScreen = () => {
           <View style={styles.scanCard}>
             <ToggleTabsRN tabs={tabs} onTabChange={setActiveTab} />
 
-            {!scannedDocument ? (
+            {scannedDocuments.length === 0 ? (
               <Pressable
                 onPress={activeTab === "1" ? handleScan : handleUpload}>
                 {({ pressed }) => (
@@ -350,7 +473,7 @@ const ScanScreen = () => {
                           ? "Click to scan document"
                           : "Click to upload document"
                       }
-                      description="Upload a clear photo or document for AI analysis"
+                      description="Upload clear photos or documents for AI analysis"
                       icon={
                         activeTab === "1"
                           ? "camera-outline"
@@ -367,55 +490,117 @@ const ScanScreen = () => {
                   styles.scanCardContent,
                   { borderColor: colors.accent },
                 ]}>
-                <View style={styles.documentContainer}>
-                  {scannedDocument.type.includes("image") ? (
-                    <Image
-                      source={{ uri: scannedDocument.uri }}
-                      style={styles.documentImage}
-                    />
-                  ) : (
-                    <View
+                <View style={styles.documentsHeader}>
+                  <Text style={[styles.documentsTitle, { color: colors.text }]}>
+                    Documents ({scannedDocuments.length})
+                  </Text>
+                  <View style={styles.headerButtons}>
+                    <TouchableOpacity
                       style={[
-                        styles.documentIconContainer,
-                        { backgroundColor: colors.accent + "20" },
-                      ]}>
-                      <Ionicons
-                        name={getDocumentIcon(scannedDocument.type)}
-                        size={60}
-                        color={colors.accent}
-                      />
-                      <Text
-                        style={[
-                          styles.documentCaption,
-                          { color: colors.text },
-                        ]}>
-                        {getDocumentTypeName(scannedDocument.type)}
-                      </Text>
-                      <Text
-                        style={[styles.documentName, { color: colors.hint }]}>
-                        {scannedDocument.name}
-                      </Text>
-                    </View>
-                  )}
+                        styles.addButton,
+                        { backgroundColor: colors.accent },
+                      ]}
+                      onPress={activeTab === "1" ? handleScan : handleUpload}>
+                      <Ionicons name="add" size={20} color="white" />
+                    </TouchableOpacity>
+                  </View>
                 </View>
 
-                <TouchableOpacity style={styles.clearButton}>
-                  <Text
-                    style={[styles.clearButtonText, { color: colors.warning }]}
-                    onPress={handleDeleteDocument}>
-                    Delete
-                  </Text>
-                  <Text
-                    style={[styles.clearButtonText, { color: colors.success }]}
-                    onPress={handleSaveDocument}>
-                    Continue
-                  </Text>
-                </TouchableOpacity>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.documentsScroll}>
+                  {scannedDocuments.map((document) => (
+                    <View key={document.id} style={styles.documentItem}>
+                      {document.type.includes("image") ? (
+                        <Image
+                          source={{ uri: document.uri }}
+                          style={styles.documentThumbnail}
+                        />
+                      ) : (
+                        <View
+                          style={[
+                            styles.documentIconThumbnail,
+                            { backgroundColor: colors.accent + "20" },
+                          ]}>
+                          <Ionicons
+                            name={getDocumentIcon(document.type)}
+                            size={40}
+                            color={colors.accent}
+                          />
+                        </View>
+                      )}
+                      <Text
+                        style={[
+                          styles.documentItemName,
+                          { color: colors.text },
+                        ]}
+                        numberOfLines={2}>
+                        {document.name || getDocumentTypeName(document.type)}
+                      </Text>
+                      <TouchableOpacity
+                        style={styles.deleteDocumentButton}
+                        onPress={() => handleDeleteDocument(document)}>
+                        <Ionicons
+                          name="close-circle"
+                          size={25}
+                          color={colors.warning}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </ScrollView>
+
+                <View style={styles.actionButtons}>
+                  <TouchableOpacity
+                    style={[
+                      styles.actionButton,
+                      { backgroundColor: colors.warning + "20" },
+                    ]}
+                    onPress={handleDeleteAllDocuments}>
+                    <Text
+                      style={[
+                        styles.actionButtonText,
+                        { color: colors.warning },
+                      ]}>
+                      Delete All
+                    </Text>
+                  </TouchableOpacity>
+                  {!isAnalyzed ? (
+                    <TouchableOpacity
+                      style={[
+                        styles.actionButton,
+                        { backgroundColor: colors.accent },
+                      ]}
+                      onPress={handleAnalyzeDocuments}
+                      disabled={isUploading}>
+                      <Text
+                        style={[styles.actionButtonText, { color: "white" }]}>
+                        {isUploading ? "Analyzing..." : "Analyze"}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity
+                      style={[
+                        styles.actionButton,
+                        { backgroundColor: colors.success + "20" },
+                      ]}
+                      onPress={handleSaveDocuments}>
+                      <Text
+                        style={[
+                          styles.actionButtonText,
+                          { color: colors.success },
+                        ]}>
+                        Continue
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               </View>
             )}
 
             {/* Connection Status */}
-            {scannedDocument && (
+            {scannedDocuments.length > 0 && isAnalyzed && (
               <View style={styles.statusContainer}>
                 <View
                   style={[
@@ -431,84 +616,105 @@ const ScanScreen = () => {
                 />
                 <Text style={[styles.statusText, { color: colors.text }]}>
                   {isUploading
-                    ? "Uploading document..."
+                    ? uploadProgress || "Uploading documents..."
                     : isConnecting
                     ? "Connecting..."
                     : !isConnected
                     ? "Disconnected"
-                    : "Connected"}
+                    : `Connected - ${scannedDocuments.length} document(s) ready`}
+                </Text>
+              </View>
+            )}
+
+            {/* Upload Progress */}
+            {isUploading && uploadProgress && (
+              <View style={[styles.progressContainer, { backgroundColor: colors.card }]}>
+                <Text style={[styles.progressText, { color: colors.accent }]}>
+                  {uploadProgress}
                 </Text>
               </View>
             )}
 
             {/* Chat Messages */}
-            {scannedDocument && chatId && isConnected && (
-              <View style={styles.chatContainer}>
-                <View style={styles.messagesContainer}>
-                  {messages.map((message) => (
-                    <View
-                      key={message.id}
-                      style={[
-                        styles.messageWrapper,
-                        !message.isBot && styles.userMessageWrapper,
-                      ]}>
+            {scannedDocuments.length > 0 &&
+              currentChatId &&
+              isConnected &&
+              isAnalyzed && (
+                <View style={styles.chatContainer}>
+                  <View style={styles.messagesContainer}>
+                    {displayMessages.map((message) => (
                       <View
+                        key={message.id}
                         style={[
-                          styles.messageBubble,
-                          { backgroundColor: colors.card },
-                          !message.isBot && {
-                            backgroundColor: colors.userAccent,
-                          },
-                          message.isTyping && { opacity: 0.7 },
+                          styles.messageWrapper,
+                          !message.isBot && styles.userMessageWrapper,
                         ]}>
-                        <Text
-                          style={[styles.messageText, { color: colors.text }]}>
-                          {message.text}
-                        </Text>
+                        <View
+                          style={[
+                            styles.messageBubble,
+                            { backgroundColor: colors.card },
+                            !message.isBot && {
+                              backgroundColor: colors.userAccent,
+                            },
+                            message.isTyping && { opacity: 0.7 },
+                          ]}>
+                          <Text
+                            style={[
+                              styles.messageText,
+                              { color: colors.text },
+                            ]}>
+                            {message.text}
+                          </Text>
+                        </View>
                       </View>
-                    </View>
-                  ))}
+                    ))}
+                  </View>
                 </View>
-              </View>
-            )}
+              )}
           </View>
         </ScrollView>
 
         {/* Input for additional questions */}
-        {scannedDocument && chatId && !isUploading && isConnected && (
-          <KeyboardAvoidingView
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
-            style={styles.inputContainer}>
-            <View
-              style={[
-                styles.inputWrapper,
-                { backgroundColor: colors.background },
-              ]}>
-              <TextInput
-                style={[styles.input, { color: colors.text }]}
-                placeholder="Ask questions about your document..."
-                placeholderTextColor={colors.hint}
-                value={inputText}
-                onChangeText={setInputText}
-                multiline
-              />
-              <TouchableOpacity
-                style={styles.sendButton}
-                onPress={handleSendMessage}
-                disabled={inputText.trim() === "" || !isConnected || isTyping}>
-                <Ionicons
-                  name="send"
-                  size={20}
-                  color={
-                    inputText.trim() && isConnected && !isTyping
-                      ? colors.accent
-                      : colors.hint
-                  }
+        {scannedDocuments.length > 0 &&
+          currentChatId &&
+          !isUploading &&
+          isConnected &&
+          isAnalyzed && (
+            <KeyboardAvoidingView
+              behavior={Platform.OS === "ios" ? "padding" : "height"}
+              style={styles.inputContainer}>
+              <View
+                style={[
+                  styles.inputWrapper,
+                  { backgroundColor: colors.background },
+                ]}>
+                <TextInput
+                  style={[styles.input, { color: colors.text }]}
+                  placeholder="Ask questions about your documents..."
+                  placeholderTextColor={colors.hint}
+                  value={inputText}
+                  onChangeText={setInputText}
+                  multiline
                 />
-              </TouchableOpacity>
-            </View>
-          </KeyboardAvoidingView>
-        )}
+                <TouchableOpacity
+                  style={styles.sendButton}
+                  onPress={handleSendMessage}
+                  disabled={
+                    inputText.trim() === "" || !isConnected || isTyping
+                  }>
+                  <Ionicons
+                    name="send"
+                    size={20}
+                    color={
+                      inputText.trim() && isConnected && !isTyping
+                        ? colors.accent
+                        : colors.hint
+                    }
+                  />
+                </TouchableOpacity>
+              </View>
+            </KeyboardAvoidingView>
+          )}
       </SafeAreaView>
     </View>
   );
@@ -536,9 +742,87 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginVertical: 16,
     paddingHorizontal: 16,
+    paddingVertical: 16,
   },
   scanCardContentPressed: {
     borderWidth: 2,
+  },
+  documentsHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    width: "100%",
+    marginBottom: 16,
+  },
+  documentsTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+  },
+  headerButtons: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  addButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  documentsScroll: {
+    width: "100%",
+    marginBottom: 16,
+  },
+  documentItem: {
+    width: 120,
+    marginRight: 12,
+    marginTop: 12,
+    alignItems: "center",
+    position: "relative",
+  },
+  documentThumbnail: {
+    width: 100,
+    height: 100,
+    borderRadius: 8,
+    resizeMode: "cover",
+  },
+  documentIconThumbnail: {
+    width: 100,
+    height: 100,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  documentItemName: {
+    marginTop: 8,
+    fontSize: 12,
+    textAlign: "center",
+    lineHeight: 16,
+  },
+  deleteDocumentButton: {
+    position: "absolute",
+    top: -5,
+    right: 0,
+    backgroundColor: "white",
+    borderRadius: 10,
+  },
+  actionButtons: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+    width: "100%",
+  },
+  actionButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  actionButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
   },
   documentContainer: {
     alignItems: "center",
@@ -652,5 +936,14 @@ const styles = StyleSheet.create({
   sendButton: {
     paddingLeft: 10,
     paddingBottom: 12,
+  },
+  progressContainer: {
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 8,
+  },
+  progressText: {
+    fontSize: 14,
+    fontWeight: "600",
   },
 });
