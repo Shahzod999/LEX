@@ -120,14 +120,6 @@ const ChatScreen = () => {
     }
   };
 
-  // Reset user selection flag when chat is actually joined
-  useEffect(() => {
-    if (currentChat.chatId && userSelectedChat) {
-      setSelectedChatId(currentChat.chatId);
-      // Don't reset userSelectedChat flag here to prevent auto-switching back
-    }
-  }, [currentChat.chatId, userSelectedChat]);
-
   // Connection status
   const getConnectionStatus = () => {
     if (isConnecting) return "Connecting...";
