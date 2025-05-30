@@ -3,6 +3,7 @@ import React from "react";
 import ThemedCard from "../../ThemedCard";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@/context/ThemeContext";
+import { formatDate, formatDayMonthYear } from "@/utils/formatDate";
 
 const Documents = ({
   title,
@@ -10,12 +11,16 @@ const Documents = ({
   status,
   uploadedDate,
   deadline,
+  description,
+  expirationDate,
 }: {
   title: string;
   documentType: string;
   status: string;
   uploadedDate: string;
-  deadline: string;
+  deadline?: string;
+  description?: string;
+  expirationDate?: string | null;
 }) => {
   const { colors } = useTheme();
   return (
@@ -23,7 +28,7 @@ const Documents = ({
       <View style={styles.header}>
         <View style={styles.headerText}>
           <Ionicons name="document-outline" size={24} color={colors.hint} />
-          <Text style={{ color: colors.hint }}>{uploadedDate}</Text>
+          <Text style={{ color: colors.hint }}>{formatDate(uploadedDate)}</Text>
         </View>
         <View style={[styles.status, { backgroundColor: colors.accent }]}>
           <Text style={{ color: "white" }}>{status}</Text>
@@ -31,20 +36,38 @@ const Documents = ({
       </View>
 
       <View style={[styles.content, { borderColor: colors.border }]}>
-        <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
+        <Text
+          style={[styles.title, { color: colors.text }]}
+          numberOfLines={1}
+          ellipsizeMode="tail">
+          {title}
+        </Text>
 
         <Text
           style={[styles.documentType, { color: colors.hint }]}
           numberOfLines={3}
           ellipsizeMode="tail">
-          {documentType}
+          {description}
         </Text>
 
-        <View style={styles.documentContainer}>
-          <Ionicons name="calendar-outline" size={24} color={colors.text} />
-          <Text style={{ color: colors.text }}>Deadline: </Text>
-          <Text style={{ color: colors.text }}>{deadline}</Text>
-        </View>
+        {deadline && (
+          <View style={styles.documentContainer}>
+            <Ionicons name="calendar-outline" size={24} color={colors.text} />
+            <Text style={{ color: colors.text }}>Deadline: </Text>
+            <Text style={{ color: colors.text }}>
+              {formatDayMonthYear(deadline)}
+            </Text>
+          </View>
+        )}
+        {expirationDate && (
+          <View style={styles.documentContainer}>
+            <Ionicons name="calendar-outline" size={24} color={colors.text} />
+            <Text style={{ color: colors.text }}>Expiration Date: </Text>
+            <Text style={{ color: colors.text }}>
+              {formatDayMonthYear(expirationDate)}
+            </Text>
+          </View>
+        )}
       </View>
 
       <View style={styles.viewDetails}>
@@ -86,7 +109,6 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingVertical: 10,
     borderBottomWidth: 1,
-
   },
   title: {
     fontSize: 20,

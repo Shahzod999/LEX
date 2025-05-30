@@ -1,5 +1,12 @@
 import mongoose from "mongoose";
 
+const infoSchema = new mongoose.Schema({
+  deadline: { type: String, default: "" },
+  description: { type: String, default: "" },
+  expirationDate: { type: Date, default: null },
+  status: { type: String, default: "pending" },
+});
+
 const documentSchema = new mongoose.Schema(
   {
     userId: {
@@ -14,6 +21,7 @@ const documentSchema = new mongoose.Schema(
       ref: "Chat",
       required: true,
     },
+    info: infoSchema,
   },
   {
     timestamps: true,

@@ -68,71 +68,107 @@ export const uploadDocument = asyncHandler(
     const language = req.body.language || "English";
     const fileUrls: string[] = [];
     const messages = [];
-    const allFileContents: { fileName: string; content: string; fileType: string }[] = [];
+    const allFileContents: {
+      fileName: string;
+      content: string;
+      fileType: string;
+    }[] = [];
 
-    // Create user-specific directory structure
-    const userUploadsDir = path.join("uploads", req.user.userId.toString(), "docs");
+    // Создание директории для пользователя
+    const userUploadsDir = path.join(
+      "uploads",
+      req.user.userId.toString(),
+      "docs"
+    );
     if (!fs.existsSync(userUploadsDir)) {
       fs.mkdirSync(userUploadsDir, { recursive: true });
     }
 
-    const chat = await Chat.create({
-      userId: req.user.userId,
-      title: req.body.title || "Multiple Documents Analysis",
-      description: "Multiple documents analysis chat",
-      sourceType: "document",
-      messages: [],
-    });
-
-    const systemMessage = await Message.create({
-      content: "I will analyze all your documents together and provide comprehensive insights.",
-      role: "assistant",
-    });
-
-    messages.push(systemMessage);
-
-    // Process all files and extract content
+    // Загрузка файлов и извлечение текста
     for (const file of req.files) {
       const fileType = path.extname(file.originalname).toLowerCase();
       const newFileName = `${Date.now()}-${file.originalname}`;
       const newFilePath = path.join(userUploadsDir, newFileName);
 
-      // Move file to user-specific directory
       fs.renameSync(file.path, newFilePath);
       fileUrls.push(newFilePath);
 
-      // Extract content from file
       const fileContent = await extractText(newFilePath, fileType);
       allFileContents.push({
         fileName: file.originalname,
         content: fileContent,
-        fileType: fileType
+        fileType: fileType,
       });
     }
 
-    // Create a single user message listing all uploaded files
-    const filesList = allFileContents.map(file => file.fileName).join(", ");
+    // Комбинированный контент для анализа
+    const combinedContent = allFileContents
+      .map(
+        (file) =>
+          `=== ${file.fileName} (${file.fileType}) ===\n${file.content}\n\n`
+      )
+      .join("");
+
+    // Создаем чат
+    const chat = await Chat.create({
+      userId: req.user.userId,
+      title:
+        req.body.title || `Analysis of ${allFileContents.length} Documents`,
+      description: "Document analysis chat",
+      sourceType: "document",
+      messages: [],
+    });
+
+    // Системное сообщение
+    const systemMessage = await Message.create({
+      content: "I will analyze your documents and extract key information.",
+      role: "assistant",
+    });
+    messages.push(systemMessage);
+
+    // Сообщение о загруженных файлах
+    const filesList = allFileContents.map((file) => file.fileName).join(", ");
     const userMessage = await Message.create({
       role: "user",
       content: `Uploaded documents: ${filesList}`,
     });
-
     messages.push(userMessage);
 
-    // Create combined prompt for all files
-    const combinedContent = allFileContents.map(file => 
-      `=== ${file.fileName} (${file.fileType}) ===\n${file.content}\n\n`
-    ).join("");
+    // Единый запрос к OpenAI для анализа и извлечения деталей
+    let assistantMessageContent = "";
+    let extractedDetails = {
+      deadline: "",
+      expirationDate: null,
+      description: "",
+    };
 
-    const combinedPrompt = `Please analyze these ${allFileContents.length} documents together and provide a comprehensive analysis. Here are the documents:\n\n${combinedContent}\n\nPlease provide:\n1. A summary of each document\n2. Key insights and findings\n3. Connections or relationships between the documents\n4. Overall analysis and recommendations\n\nReply in: ${language}`;
-
-    let assistantMessageContent = "I'll analyze all your documents together.";
     try {
+      const combinedPrompt = `
+        DOCUMENT ANALYSIS TASK
+
+        1. EXTRACT KEY DETAILS:
+        - Deadline (format: YYYY-MM-DD or empty)
+        - Expiration date (format: YYYY-MM-DD or null)
+        - Brief description (1-2 sentences)
+
+        2. PROVIDE FULL ANALYSIS:
+        - Summary of each document
+        - Key findings and risks
+        - Recommendations
+
+        DOCUMENTS:
+        ${combinedContent}
+
+        Respond in: ${language}
+        Format: JSON with {details: {deadline, expirationDate, description}, analysis: string}
+      `;
+
       const completion = await openai.chat.completions.create({
         messages: [
           {
             role: "system",
-            content: `You are a comprehensive document analysis assistant. Analyze multiple documents together and provide detailed insights, summaries, and connections between them. Always respond in: ${language}`,
+            content:
+              "You are a professional document analyst. Extract key details first, then provide full analysis.",
           },
           {
             role: "user",
@@ -140,31 +176,49 @@ export const uploadDocument = asyncHandler(
           },
         ],
         model: "gpt-4o",
-        max_tokens: 4000, // Увеличиваем лимит токенов для более подробного анализа
+        response_format: { type: "json_object" },
       });
 
-      assistantMessageContent = completion.choices[0].message.content || "";
+      const response = JSON.parse(
+        completion.choices[0].message.content || "{}"
+      );
+      extractedDetails = response.details;
+      assistantMessageContent = response.analysis;
     } catch (error) {
       console.error("OpenAI error:", error);
-      assistantMessageContent = "Sorry, I encountered an error while analyzing your documents. Please try again.";
+      assistantMessageContent =
+        "Error analyzing documents. Please review manually.";
+      extractedDetails = {
+        deadline: "",
+        expirationDate: null,
+        description: "Analysis failed",
+      };
     }
 
+    // Сохраняем ответ ассистента
     const assistantMessage = await Message.create({
       content: assistantMessageContent,
       role: "assistant",
     });
-
     messages.push(assistantMessage);
 
-    // Add messages to chat
-    chat.messages.push(systemMessage._id, userMessage._id, assistantMessage._id);
+    // Обновляем чат
+    chat.messages.push(...messages.map((m) => m._id));
     await chat.save();
 
+    // Создаем документ
     const document = await Document.create({
       userId: req.user.userId,
-      title: req.body.title || `Analysis of ${allFileContents.length} Documents`,
+      title:
+        req.body.title || `Analysis of ${allFileContents.length} Documents`,
       filesUrl: fileUrls,
       chatId: chat._id,
+      info: {
+        deadline: req.body.deadline || extractedDetails.deadline,
+        description: assistantMessageContent || extractedDetails.description,
+        expirationDate:
+          req.body.expirationDate || extractedDetails.expirationDate,
+      },
     });
 
     res.status(201).json({
@@ -236,6 +290,9 @@ export const deleteDocs = asyncHandler(
     // Delete the document
     await doc.deleteOne();
 
-    res.status(200).json({ message: "Document, files, chat and associated messages deleted successfully" });
+    res.status(200).json({
+      message:
+        "Document, files, chat and associated messages deleted successfully",
+    });
   }
 );

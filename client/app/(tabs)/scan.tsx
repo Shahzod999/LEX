@@ -137,7 +137,7 @@ const ScanScreen = () => {
         .map((doc) => doc.name || getDocumentTypeName(doc.type))
         .join(", ");
 
-      formData.append("title", `Documents Analysis - ${documentNames}`);
+      formData.append("title", documentNames);
       formData.append("language", "Russian");
 
       setUploadProgress("Uploading and analyzing documents...");

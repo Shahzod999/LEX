@@ -12,6 +12,12 @@ export interface DocumentTypes {
   filesUrl: string[];
   chatId: string;
   _id: string;
+  info: {
+    deadline: string;
+    expirationDate: string | null;
+    description: string;
+    status: string;
+  };
   createdAt: string;
   updatedAt: string;
   __v: number;

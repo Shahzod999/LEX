@@ -15,6 +15,7 @@ const tabs = [
 
 export default function ActivityScreen() {
   const [activeTab, setActiveTab] = useState<string>("1");
+
   return (
     <ThemedScreen>
       <ScrollView
