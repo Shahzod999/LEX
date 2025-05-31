@@ -14,6 +14,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@/context/ThemeContext";
 import {
+  useCreateNewChatMutation,
   useDeleteChatMutation,
   useGetUserChatsQuery,
 } from "@/redux/api/endpoints/chatApiSlice";
@@ -28,22 +29,21 @@ interface ChatHistoryMenuProps {
   visible: boolean;
   onClose: () => void;
   onSelectChat?: (chatId: string) => void;
-  onCreateNewChat?: () => void;
 }
 
 export default function ChatHistoryMenu({
   visible,
   onClose,
   onSelectChat,
-  onCreateNewChat,
 }: ChatHistoryMenuProps) {
   const { colors } = useTheme();
   const [isVisible, setIsVisible] = useState(visible);
   const menuWidth = screenWidth * 0.85;
   const slideAnim = useRef(new Animated.Value(-menuWidth)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const { data: chatHistory, isLoading, refetch } = useGetUserChatsQuery();
+  const { data: chatHistory, isLoading } = useGetUserChatsQuery();
   const [deleteChat, { isLoading: isDeleting }] = useDeleteChatMutation();
+  const [createNewChat, { isLoading: isCreating }] = useCreateNewChatMutation();
 
   useEffect(() => {
     if (visible) {
@@ -81,10 +81,14 @@ export default function ChatHistoryMenu({
     onClose();
   };
 
-  const handleCreateNewChat = () => {
-    refetch();
-    onCreateNewChat?.();
-    onClose();
+  const handleCreateNewChat = async () => {
+    try {
+      const res = await createNewChat().unwrap();
+      onSelectChat?.(res._id);
+      onClose();
+    } catch (error) {
+      console.error("Error creating new chat:", error);
+    }
   };
 
   const handleDeleteChat = async (chatId: string) => {
@@ -96,9 +100,6 @@ export default function ChatHistoryMenu({
       } else {
         handleCreateNewChat();
       }
-      // if (chatHistory && chatHistory.length <= 1) {
-      //   onSelectChat?.("");
-      // }
     } catch (error) {
       console.error("Error deleting chat:", error);
     }
@@ -154,7 +155,7 @@ export default function ChatHistoryMenu({
       animationType="none"
       onRequestClose={onClose}>
       <View style={styles.modalContainer}>
-        {(isLoading || isDeleting) && <Loading />}
+        {(isLoading || isDeleting || isCreating) && <Loading />}
         <TouchableWithoutFeedback onPress={onClose}>
           <Animated.View
             style={[

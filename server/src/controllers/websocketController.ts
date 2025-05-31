@@ -435,7 +435,7 @@ export class ChatWebSocketServer {
     );
   }
 
-  // создание нового чата
+  // создание нового чата // можно удалить не используется логика старая
   private async handleCreateChat(
     ws: AuthenticatedWebSocket,
     message: WebSocketMessage

@@ -147,7 +147,7 @@ export class WebSocketChatService {
     });
   }
 
-  // создание нового чата
+  // создание нового чата // можно удалить не используется логика старая
   createChat() {
     this.send({
       type: "create_chat",

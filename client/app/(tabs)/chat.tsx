@@ -47,7 +47,6 @@ const ChatScreen = () => {
     isConnecting,
     activeChatId,
     sendMessage,
-    createChat,
     joinChat,
     setActiveChat,
     getChatState,
@@ -125,13 +124,6 @@ const ChatScreen = () => {
       setSelectedChatId(chatId);
       setActiveChat(chatId);
       joinChat(chatId);
-    }
-  };
-
-  const handleCreateNewChat = () => {
-    if (isConnected) {
-      setSelectedChatId(""); // Clear selection first
-      createChat();
     }
   };
 
@@ -283,7 +275,6 @@ const ChatScreen = () => {
           visible={chatHistoryVisible}
           onClose={() => setChatHistoryVisible(false)}
           onSelectChat={handleSelectChat}
-          onCreateNewChat={handleCreateNewChat}
         />
       </SafeAreaView>
     </View>

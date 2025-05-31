@@ -41,6 +41,14 @@ export const chatApiSlice = apiSlice.injectEndpoints({
       }),
       invalidatesTags: ["Chat"],
     }),
+
+    createNewChat: builder.mutation<ChatHistoryType, void>({
+      query: () => ({
+        url: "/chat/create",
+        method: "POST",
+      }),
+      invalidatesTags: ["Chat"],
+    }),
   }),
 });
 
@@ -49,4 +57,5 @@ export const {
   useGetUserOneChatQuery,
   useSendMessageMutation,
   useDeleteChatMutation,
+  useCreateNewChatMutation,
 } = chatApiSlice;

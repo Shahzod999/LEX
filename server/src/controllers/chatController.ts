@@ -183,3 +183,16 @@ export const deleteUserChat = asyncHandler(
     });
   }
 );
+
+export const createChat = asyncHandler(
+  async (req: AuthenticatedRequest, res: Response) => {
+    const chat = await Chat.create({
+      userId: req.user?.userId,
+      title: "New chat",
+      description: "New conversation",
+      messages: [],
+    });
+
+    res.status(200).json(chat);
+  }
+);
