@@ -18,7 +18,6 @@ import ChatHistoryMenu from "@/components/ChatHistoryMenu";
 import { useTheme } from "@/context/ThemeContext";
 import { useChat } from "@/context/ChatContext";
 import { useGetUserOneChatQuery } from "@/redux/api/endpoints/chatApiSlice";
-import { usePathname } from "expo-router";
 
 // Interface for UI messages that includes all possible fields
 interface UIMessage {
@@ -36,36 +35,52 @@ const ChatScreen = () => {
   const [inputText, setInputText] = useState("");
   const [chatHistoryVisible, setChatHistoryVisible] = useState(false);
   const [selectedChatId, setSelectedChatId] = useState<string>("");
-  const [userSelectedChat, setUserSelectedChat] = useState(false); // Flag to track if user manually selected a chat
 
   const { data: currentChatData, isLoading: isLoadingChat } =
     useGetUserOneChatQuery(selectedChatId || "", {
       refetchOnMountOrArgChange: true,
+      // skip: !selectedChatId, // Skip query if no chat selected
     });
-  console.log(selectedChatId, "selectedChatId");
 
   const {
     isConnected,
     isConnecting,
-    currentChat,
+    activeChatId,
     sendMessage,
     createChat,
     joinChat,
+    setActiveChat,
+    getChatState,
   } = useChat();
 
   // Auto-connect to API chat data only if user hasn't manually selected a chat
   useEffect(() => {
-    if (isConnected && currentChatData?._id) {
+    if (isConnected && currentChatData?._id && !selectedChatId) {
       setSelectedChatId(currentChatData._id);
+      setActiveChat(currentChatData._id);
       joinChat(currentChatData._id);
     }
-  }, [isConnected, currentChatData?._id]);
+  }, [
+    isConnected,
+    currentChatData?._id,
+    selectedChatId,
+    setActiveChat,
+    joinChat,
+  ]);
+
+  // Get the chat state for current selected chat
+  const currentChatState = selectedChatId ? getChatState(selectedChatId) : null;
 
   // Determine which messages to show
   const getDisplayMessages = (): UIMessage[] => {
-    // If we have WebSocket messages and they match current selection, use them (real-time)
-    if (currentChat.messages && currentChat.chatId === selectedChatId) {
-      return currentChat.messages;
+    // If we have WebSocket chat state for selected chat, use it (real-time)
+    if (currentChatState && currentChatState.chatId === selectedChatId) {
+      return currentChatState.messages.map((msg) => ({
+        messageId: msg.messageId,
+        content: msg.content,
+        role: msg.role,
+        timestamp: msg.timestamp,
+      }));
     }
 
     // Otherwise use API data if it matches selection
@@ -82,12 +97,13 @@ const ChatScreen = () => {
   };
 
   const displayMessages = getDisplayMessages();
-  const currentChatId = currentChat.chatId;
 
   const handleSendMessage = () => {
-    if (inputText.trim() === "" || !isConnected) return;
+    if (inputText.trim() === "" || !isConnected || !selectedChatId) return;
 
-    sendMessage(inputText);
+    // Set this chat as active and send message
+    setActiveChat(selectedChatId);
+    sendMessage(inputText, selectedChatId);
     setInputText("");
   };
 
@@ -106,25 +122,31 @@ const ChatScreen = () => {
 
   const handleSelectChat = (chatId: string) => {
     if (isConnected && chatId) {
-      setUserSelectedChat(true); // Mark that user manually selected a chat
       setSelectedChatId(chatId);
+      setActiveChat(chatId);
       joinChat(chatId);
     }
   };
 
   const handleCreateNewChat = () => {
     if (isConnected) {
-      setUserSelectedChat(true); // Mark that user initiated action
       setSelectedChatId(""); // Clear selection first
       createChat();
     }
   };
 
+  // Listen for new chat creation
+  useEffect(() => {
+    if (activeChatId && !selectedChatId) {
+      setSelectedChatId(activeChatId);
+    }
+  }, [activeChatId, selectedChatId]);
+
   // Connection status
   const getConnectionStatus = () => {
     if (isConnecting) return "Connecting...";
     if (!isConnected) return "Disconnected";
-    if (!currentChatId) return "Ready to chat...";
+    if (!selectedChatId) return "Ready to chat...";
     return "Connected";
   };
 
@@ -148,11 +170,11 @@ const ChatScreen = () => {
     });
   }
 
-  // Add streaming message if typing
-  if (currentChat.isTyping && currentChat.streamingMessage) {
+  // Add streaming message if typing for this specific chat
+  if (currentChatState?.isTyping && currentChatState?.streamingMessage) {
     finalMessages.push({
       _id: "typing",
-      content: currentChat.streamingMessage,
+      content: currentChatState.streamingMessage,
       role: "assistant",
       createdAt: new Date().toISOString(),
       isTyping: true,
@@ -236,13 +258,19 @@ const ChatScreen = () => {
               style={styles.sendButton}
               onPress={handleSendMessage}
               disabled={
-                inputText.trim() === "" || !isConnected || currentChat.isTyping
+                inputText.trim() === "" ||
+                !isConnected ||
+                !selectedChatId ||
+                currentChatState?.isTyping
               }>
               <Ionicons
                 name="send"
                 size={20}
                 color={
-                  inputText.trim() && isConnected && !currentChat.isTyping
+                  inputText.trim() &&
+                  isConnected &&
+                  selectedChatId &&
+                  !currentChatState?.isTyping
                     ? colors.accent
                     : colors.hint
                 }

@@ -6,6 +6,11 @@ interface Message {
   content: string;
 }
 
+interface DeleteChatResponse {
+  message: string;
+  nextChatId: string;
+}
+
 export const chatApiSlice = apiSlice.injectEndpoints({
   endpoints: (builder) => ({
     getUserChats: builder.query<ChatHistoryType[], void>({
@@ -29,7 +34,7 @@ export const chatApiSlice = apiSlice.injectEndpoints({
       }),
       invalidatesTags: ["Chat"],
     }),
-    deleteChat: builder.mutation({
+    deleteChat: builder.mutation<DeleteChatResponse, string>({
       query: (chatId) => ({
         url: `/chat/${chatId}`,
         method: "DELETE",

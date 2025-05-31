@@ -89,10 +89,16 @@ export default function ChatHistoryMenu({
 
   const handleDeleteChat = async (chatId: string) => {
     try {
-      await deleteChat(chatId).unwrap();
-      if (chatHistory && chatHistory.length <= 1) {
-        onSelectChat?.("");
+      const res = await deleteChat(chatId).unwrap();
+
+      if (res.nextChatId) {
+        onSelectChat?.(res.nextChatId);
+      } else {
+        handleCreateNewChat();
       }
+      // if (chatHistory && chatHistory.length <= 1) {
+      //   onSelectChat?.("");
+      // }
     } catch (error) {
       console.error("Error deleting chat:", error);
     }

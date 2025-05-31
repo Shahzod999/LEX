@@ -11,6 +11,7 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// AuthenticatedWebSocket - расширяет стандартный WebSocket, добавляя пользовательские поля (userId, chatId и др.)
 interface AuthenticatedWebSocket extends WebSocket {
   userId?: string;
   chatId?: string;
@@ -18,7 +19,7 @@ interface AuthenticatedWebSocket extends WebSocket {
   lastActivity?: number;
   messageCount?: number;
 }
-
+// WebSocketMessage определяет структуру сообщений между клиентом и сервером
 interface WebSocketMessage {
   type: "message" | "join_chat" | "create_chat" | "switch_chat";
   data: {
@@ -27,7 +28,7 @@ interface WebSocketMessage {
     token?: string;
   };
 }
-
+// UserConnection - хранит информацию о соединениях пользователя
 interface UserConnection {
   connections: Map<string, AuthenticatedWebSocket>; // connectionId -> WebSocket
   lastActivity: number;
@@ -68,10 +69,12 @@ export class ChatWebSocketServer {
     });
   }
 
+  // генерация уникального идентификатора соединения
   private generateConnectionId(): string {
     return `conn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 
+  // аутентификация пользователя по токену
   private async authenticateUser(token: string): Promise<string | null> {
     try {
       if (!process.env.JWT_SECRET) {
@@ -95,6 +98,7 @@ export class ChatWebSocketServer {
     }
   }
 
+  // проверка лимита сообщений на пользователя
   private checkRateLimit(userId: string): boolean {
     const userConnection = this.users.get(userId);
     if (!userConnection) return true;
@@ -111,6 +115,7 @@ export class ChatWebSocketServer {
     return userConnection.messageCount < this.config.rateLimitMaxMessages;
   }
 
+  // увеличение счетчика сообщений
   private incrementMessageCount(userId: string): void {
     const userConnection = this.users.get(userId);
     if (userConnection) {
@@ -119,6 +124,7 @@ export class ChatWebSocketServer {
     }
   }
 
+  // периодическая проверка неактивных соединений
   private cleanupInactiveConnections(): void {
     const now = Date.now();
     const inactiveUsers: string[] = [];
@@ -164,6 +170,7 @@ export class ChatWebSocketServer {
     }
   }
 
+  // обработка нового подключения
   private async handleConnection(ws: AuthenticatedWebSocket) {
     // Проверка лимита соединений
     if (this.connectionCount >= this.config.maxConnections) {
@@ -230,6 +237,7 @@ export class ChatWebSocketServer {
     );
   }
 
+  // очистка при отключении
   private handleDisconnection(ws: AuthenticatedWebSocket): void {
     if (ws.userId && ws.connectionId) {
       const userConnection = this.users.get(ws.userId);
@@ -251,6 +259,7 @@ export class ChatWebSocketServer {
     );
   }
 
+  // обработка сообщений от клиента
   private async handleMessage(
     ws: AuthenticatedWebSocket,
     message: WebSocketMessage
@@ -278,6 +287,7 @@ export class ChatWebSocketServer {
     }
   }
 
+  // обработка соединения с чатом
   private async handleJoinChat(
     ws: AuthenticatedWebSocket,
     message: WebSocketMessage
@@ -369,6 +379,7 @@ export class ChatWebSocketServer {
     }
   }
 
+  // переключение между чатами
   private async handleSwitchChat(
     ws: AuthenticatedWebSocket,
     message: WebSocketMessage
@@ -424,6 +435,7 @@ export class ChatWebSocketServer {
     );
   }
 
+  // создание нового чата
   private async handleCreateChat(
     ws: AuthenticatedWebSocket,
     message: WebSocketMessage
@@ -469,6 +481,7 @@ export class ChatWebSocketServer {
     }
   }
 
+  // обработка сообщений от пользователя
   private async handleChatMessage(
     ws: AuthenticatedWebSocket,
     message: WebSocketMessage
@@ -552,6 +565,7 @@ export class ChatWebSocketServer {
         JSON.stringify({
           type: "user_message",
           data: {
+            chatId: ws.chatId,
             messageId: userMessageDoc._id,
             content: userMessage.trim(),
             role: "user",
@@ -568,7 +582,8 @@ export class ChatWebSocketServer {
       );
 
       // Простой промпт для всех чатов
-      const systemPrompt = "You are a comprehensive legal assistant helping users with any legal issues, including document analysis, visas, migration, deportation, documents, police, court, lawyers, legal translations, work permits, asylum, residence permits, study abroad, and legal statement filings. Automatically detect the user's language and reply in that language. If the question is not legal-related, politely explain you can only help with legal topics.";
+      const systemPrompt =
+        "You are a comprehensive legal assistant helping users with any legal issues, including document analysis, visas, migration, deportation, documents, police, court, lawyers, legal translations, work permits, asylum, residence permits, study abroad, and legal statement filings. Automatically detect the user's language and reply in that language. If the question is not legal-related, politely explain you can only help with legal topics.";
 
       const openaiMessages = [
         {
@@ -585,7 +600,10 @@ export class ChatWebSocketServer {
       ws.send(
         JSON.stringify({
           type: "assistant_message_start",
-          data: { message: "Ассистент печатает..." },
+          data: {
+            chatId: ws.chatId,
+            message: "Ассистент печатает...",
+          },
         })
       );
 
@@ -615,7 +633,10 @@ export class ChatWebSocketServer {
             ws.send(
               JSON.stringify({
                 type: "assistant_message_token",
-                data: { token },
+                data: {
+                  chatId: ws.chatId,
+                  token,
+                },
               })
             );
           }
@@ -644,6 +665,7 @@ export class ChatWebSocketServer {
             JSON.stringify({
               type: "assistant_message_complete",
               data: {
+                chatId: ws.chatId,
                 messageId: assistantMessageDoc._id,
                 content: assistantMessageContent,
                 role: "assistant",
@@ -673,6 +695,7 @@ export class ChatWebSocketServer {
             JSON.stringify({
               type: "assistant_message_complete",
               data: {
+                chatId: ws.chatId,
                 messageId: assistantMessageDoc._id,
                 content: errorMessage,
                 role: "assistant",
@@ -697,6 +720,7 @@ export class ChatWebSocketServer {
     }
   }
 
+  // широковещательная отправка сообщений
   public broadcast(message: any) {
     this.users.forEach((userConnection) => {
       userConnection.connections.forEach((client) => {
@@ -707,6 +731,7 @@ export class ChatWebSocketServer {
     });
   }
 
+  // отправка сообщения конкретному пользователю
   public sendToUser(userId: string, message: any) {
     const userConnection = this.users.get(userId);
     if (userConnection) {
@@ -718,6 +743,7 @@ export class ChatWebSocketServer {
     }
   }
 
+  // отправка сообщения конкретному пользователю в конкретном чате
   public sendToUserChat(userId: string, chatId: string, message: any) {
     const userConnection = this.users.get(userId);
     if (userConnection) {
@@ -729,6 +755,7 @@ export class ChatWebSocketServer {
     }
   }
 
+  // получение статистики
   public getStats() {
     return {
       totalConnections: this.connectionCount,

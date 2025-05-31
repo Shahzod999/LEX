@@ -17,7 +17,7 @@ import Header from "@/components/Card/Header";
 import ToggleTabsRN from "@/components/ToggleTabs/ToggleTabsRN";
 import HomeCard from "@/components/Card/HomeCard";
 import { useTheme } from "@/context/ThemeContext";
-import { useChat } from "@/context/ChatContext";
+import { useChat, useChatById } from "@/context/ChatContext";
 import { Ionicons } from "@expo/vector-icons";
 import CameraView from "@/components/Camera/CameraView";
 import * as ImagePicker from "expo-image-picker";
@@ -65,22 +65,18 @@ const ScanScreen = () => {
   const [deleteDocument, { isLoading: isDeleting }] =
     useDeleteDocumentMutation();
 
-  // Use chat context
-  const { isConnected, isConnecting, currentChat, sendMessage, joinChat } =
-    useChat();
+  // Use general chat context for connection status
+  const { isConnecting } = useChat();
+  
+  // Use specific chat hook for document chat
+  const documentChat = useChatById(documentChatId);
 
-  // Get current messages and state for documents chat
-  const currentMessages = currentChat.messages || [];
-  const isTyping = currentChat.isTyping;
-  const streamingMessage = currentChat.streamingMessage;
-  const currentChatId = currentChat.chatId;
-
-  // Connect to document chat only when we have a chatId from uploaded document
+  // Connect to document chat when we have a chatId from uploaded document
   useEffect(() => {
-    if (isConnected && documentChatId && documentChatId !== currentChatId) {
-      joinChat(documentChatId);
+    if (documentChatId && !documentChat.chatState) {
+      documentChat.joinChat();
     }
-  }, [isConnected, documentChatId, currentChatId, joinChat]);
+  }, [documentChatId, documentChat.chatState, documentChat.joinChat]);
 
   const sanitizeFileName = (
     fileName: string,
@@ -259,18 +255,18 @@ const ScanScreen = () => {
   };
 
   const handlePhotoTaken = (uri: string) => {
+    setShowCamera(false);
+
     if (uri) {
-      setShowCamera(false);
       const sanitizedFileName = sanitizeFileName(`scanned_${Date.now()}.jpg`);
       addDocument(uri, "image/jpeg", sanitizedFileName);
     }
   };
 
   const handleSendMessage = () => {
-    if (inputText.trim() === "" || !isConnected || !documentChatId) return;
+    if (inputText.trim() === "" || !documentChat.isConnected || !documentChatId) return;
 
-    // Send message to current active documents chat
-    sendMessage(inputText);
+    documentChat.sendMessage(inputText);
     setInputText("");
   };
 
@@ -370,13 +366,13 @@ const ScanScreen = () => {
   }
 
   // Prepare messages for display
-  const displayMessages = [...currentMessages];
+  const displayMessages = [...documentChat.messages];
 
   // Add streaming message if typing
-  if (isTyping && streamingMessage) {
+  if (documentChat.isTyping && documentChat.streamingMessage) {
     displayMessages.push({
       messageId: `typing_${Date.now()}`,
-      content: streamingMessage,
+      content: documentChat.streamingMessage,
       role: "assistant",
       timestamp: new Date(),
     });
@@ -546,7 +542,7 @@ const ScanScreen = () => {
                     {
                       backgroundColor: isUploading
                         ? "#ffaa00"
-                        : isConnected
+                        : isConnecting
                         ? "#44ff44"
                         : "#ff4444",
                     },
@@ -557,9 +553,7 @@ const ScanScreen = () => {
                     ? uploadProgress || "Uploading documents..."
                     : isConnecting
                     ? "Connecting..."
-                    : !isConnected
-                    ? "Disconnected"
-                    : `Connected - ${scannedDocuments.length} document(s) ready`}
+                    : "Disconnected"}
                 </Text>
               </View>
             )}
@@ -580,7 +574,7 @@ const ScanScreen = () => {
             {/* Chat Messages */}
             {scannedDocuments.length > 0 &&
               documentChatId &&
-              isConnected &&
+              documentChat.isConnected &&
               isAnalyzed && (
                 <View style={styles.chatContainer}>
                   <View style={styles.messagesContainer}>
@@ -619,7 +613,7 @@ const ScanScreen = () => {
         {scannedDocuments.length > 0 &&
           documentChatId &&
           !isUploading &&
-          isConnected &&
+          documentChat.isConnected &&
           isAnalyzed && (
             <KeyboardAvoidingView
               behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -641,13 +635,13 @@ const ScanScreen = () => {
                   style={styles.sendButton}
                   onPress={handleSendMessage}
                   disabled={
-                    inputText.trim() === "" || !isConnected || isTyping
+                    inputText.trim() === "" || !documentChat.isConnected
                   }>
                   <Ionicons
                     name="send"
                     size={20}
                     color={
-                      inputText.trim() && isConnected && !isTyping
+                      inputText.trim() && documentChat.isConnected
                         ? colors.accent
                         : colors.hint
                     }

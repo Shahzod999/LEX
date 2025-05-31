@@ -13,20 +13,24 @@ interface ChatMessage {
 }
 
 interface ChatState {
-  chatId: string | null;
+  chatId: string;
   messages: ChatMessage[];
   isTyping: boolean;
   streamingMessage: string;
+  lastActivity: Date;
 }
 
 interface ChatContextType {
   isConnected: boolean;
   isConnecting: boolean;
-  currentChat: ChatState;
-  sendMessage: (message: string) => void;
+  chats: Map<string, ChatState>;
+  activeChatId: string | null;
+  sendMessage: (message: string, chatId?: string) => void;
   createChat: () => void;
   joinChat: (chatId: string) => void;
   switchChat: (chatId: string) => void;
+  setActiveChat: (chatId: string) => void;
+  getChatState: (chatId: string) => ChatState | undefined;
   connect: () => Promise<void>;
   disconnect: () => void;
 }
@@ -46,12 +50,8 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
 }) => {
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
-  const [currentChat, setCurrentChat] = useState<ChatState>({
-    chatId: null,
-    messages: [],
-    isTyping: false,
-    streamingMessage: "",
-  });
+  const [chats, setChats] = useState<Map<string, ChatState>>(new Map());
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
 
   const chatServiceRef = useRef(getChatService());
   const messageHandlersRef = useRef<Map<string, (data: any) => void>>(new Map());
@@ -84,41 +84,73 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
 
         chat_joined: (data: any) => {
           console.log(`Joined chat:`, data.chatId);
-          setCurrentChat((prev) => ({
-            ...prev,
+          const chatState: ChatState = {
             chatId: data.chatId,
-            messages:
-              data.messages?.map((msg: any) => ({
-                messageId: msg._id,
-                content: msg.content,
-                role: msg.role,
-                timestamp: new Date(msg.createdAt),
-              })) || [],
-          }));
+            messages: data.messages?.map((msg: any) => ({
+              messageId: msg._id,
+              content: msg.content,
+              role: msg.role,
+              timestamp: new Date(msg.createdAt),
+            })) || [],
+            isTyping: false,
+            streamingMessage: "",
+            lastActivity: new Date(),
+          };
+
+          setChats(prev => {
+            const updated = new Map(prev);
+            updated.set(data.chatId, chatState);
+            return updated;
+          });
+
+          // Set as active chat if none is set
+          if (!activeChatId) {
+            setActiveChatId(data.chatId);
+          }
         },
 
         chat_created: (data: any) => {
           console.log(`Created chat:`, data.chatId);
-          setCurrentChat((prev) => ({
-            ...prev,
+          const chatState: ChatState = {
             chatId: data.chatId,
             messages: [],
-          }));
+            isTyping: false,
+            streamingMessage: "",
+            lastActivity: new Date(),
+          };
+
+          setChats(prev => {
+            const updated = new Map(prev);
+            updated.set(data.chatId, chatState);
+            return updated;
+          });
+
+          // Set as active chat
+          setActiveChatId(data.chatId);
         },
 
         chat_switched: (data: any) => {
           console.log(`Switched to chat:`, data.chatId);
-          setCurrentChat((prev) => ({
-            ...prev,
+          const chatState: ChatState = {
             chatId: data.chatId,
-            messages:
-              data.messages?.map((msg: any) => ({
-                messageId: msg._id,
-                content: msg.content,
-                role: msg.role,
-                timestamp: new Date(msg.createdAt),
-              })) || [],
-          }));
+            messages: data.messages?.map((msg: any) => ({
+              messageId: msg._id,
+              content: msg.content,
+              role: msg.role,
+              timestamp: new Date(msg.createdAt),
+            })) || [],
+            isTyping: false,
+            streamingMessage: "",
+            lastActivity: new Date(),
+          };
+
+          setChats(prev => {
+            const updated = new Map(prev);
+            updated.set(data.chatId, chatState);
+            return updated;
+          });
+
+          setActiveChatId(data.chatId);
         },
 
         user_message: (data: any) => {
@@ -129,30 +161,72 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
             timestamp: new Date(data.timestamp),
           };
 
-          setCurrentChat((prev) => ({
-            ...prev,
-            messages: [
-              ...prev.messages.filter(
-                (m) => !m.messageId || m.messageId !== data.messageId
-              ),
-              message,
-            ],
-          }));
+          const targetChatId = data.chatId || activeChatId;
+          console.log(`📤 User message for chat: ${targetChatId}`);
+
+          setChats(prev => {
+            const updated = new Map(prev);
+            const chatState = updated.get(targetChatId || "");
+            
+            if (chatState) {
+              const updatedMessages = [
+                ...chatState.messages.filter(
+                  (m) => !m.messageId || m.messageId !== data.messageId
+                ),
+                message,
+              ];
+
+              updated.set(chatState.chatId, {
+                ...chatState,
+                messages: updatedMessages,
+                lastActivity: new Date(),
+              });
+            }
+            
+            return updated;
+          });
         },
 
-        assistant_message_start: () => {
-          setCurrentChat((prev) => ({
-            ...prev,
-            isTyping: true,
-            streamingMessage: "",
-          }));
+        assistant_message_start: (data: any) => {
+          const targetChatId = data.chatId || activeChatId;
+          console.log(`🤖 Assistant starting to type in chat: ${targetChatId}`);
+          if (!targetChatId) return;
+
+          setChats(prev => {
+            const updated = new Map(prev);
+            const chatState = updated.get(targetChatId);
+            
+            if (chatState) {
+              updated.set(targetChatId, {
+                ...chatState,
+                isTyping: true,
+                streamingMessage: "",
+                lastActivity: new Date(),
+              });
+            }
+            
+            return updated;
+          });
         },
 
         assistant_message_token: (data: any) => {
-          setCurrentChat((prev) => ({
-            ...prev,
-            streamingMessage: prev.streamingMessage + data.token,
-          }));
+          const targetChatId = data.chatId || activeChatId;
+          if (!targetChatId) return;
+
+          setChats(prev => {
+            const updated = new Map(prev);
+            const chatState = updated.get(targetChatId);
+            
+            if (chatState) {
+              updated.set(targetChatId, {
+                ...chatState,
+                streamingMessage: chatState.streamingMessage + data.token,
+                lastActivity: new Date(),
+              });
+            }
+            
+            return updated;
+          });
         },
 
         assistant_message_complete: (data: any) => {
@@ -163,17 +237,33 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
             timestamp: new Date(data.timestamp),
           };
 
-          setCurrentChat((prev) => ({
-            ...prev,
-            isTyping: false,
-            streamingMessage: "",
-            messages: [
-              ...prev.messages.filter(
-                (m) => !m.messageId || m.messageId !== data.messageId
-              ),
-              message,
-            ],
-          }));
+          const targetChatId = data.chatId || activeChatId;
+          console.log(`✅ Assistant message complete for chat: ${targetChatId}`);
+          if (!targetChatId) return;
+
+          setChats(prev => {
+            const updated = new Map(prev);
+            const chatState = updated.get(targetChatId);
+            
+            if (chatState) {
+              const updatedMessages = [
+                ...chatState.messages.filter(
+                  (m) => !m.messageId || m.messageId !== data.messageId
+                ),
+                message,
+              ];
+
+              updated.set(targetChatId, {
+                ...chatState,
+                messages: updatedMessages,
+                isTyping: false,
+                streamingMessage: "",
+                lastActivity: new Date(),
+              });
+            }
+            
+            return updated;
+          });
         },
 
         error: (data: any) => {
@@ -199,22 +289,31 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
         onError("Failed to connect to chat server");
       }
     }
-  }, [token, isConnecting, isConnected, onError]);
+  }, [token, isConnecting, isConnected, onError, activeChatId]);
 
-  // Send message to current active chat
+  // Send message to specific chat or active chat
   const sendMessage = useCallback(
-    (message: string) => {
+    (message: string, chatId?: string) => {
       const service = chatServiceRef.current;
-      if (service && service.isConnected() && currentChat.chatId) {
+      const targetChatId = chatId || activeChatId;
+      
+      console.log(`🚀 Sending message to chat: ${targetChatId}, WebSocket current chat: ${service?.getCurrentChatId()}`);
+      
+      if (service && service.isConnected() && targetChatId) {
+        // Switch to target chat if it's not currently active on WebSocket
+        if (service.getCurrentChatId() !== targetChatId) {
+          console.log(`🔄 Switching WebSocket from ${service.getCurrentChatId()} to ${targetChatId}`);
+          service.switchChat(targetChatId);
+        }
         service.sendMessage(message);
       } else {
-        console.error("No chat joined. Create or join a chat first.");
+        console.error("No chat available. Create or join a chat first.");
         if (onError) {
           onError("No active chat. Please select or create a chat first.");
         }
       }
     },
-    [onError, currentChat.chatId]
+    [onError, activeChatId]
   );
 
   // Create new chat
@@ -262,17 +361,23 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     [onError]
   );
 
+  // Set active chat (UI level)
+  const setActiveChat = useCallback((chatId: string) => {
+    setActiveChatId(chatId);
+  }, []);
+
+  // Get specific chat state
+  const getChatState = useCallback((chatId: string): ChatState | undefined => {
+    return chats.get(chatId);
+  }, [chats]);
+
   // Disconnect
   const disconnect = useCallback(() => {
     disconnectChatService();
     setIsConnected(false);
     setIsConnecting(false);
-    setCurrentChat({
-      chatId: null,
-      messages: [],
-      isTyping: false,
-      streamingMessage: "",
-    });
+    setChats(new Map());
+    setActiveChatId(null);
     isInitializedRef.current = false;
   }, []);
 
@@ -297,11 +402,14 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
   const value: ChatContextType = {
     isConnected,
     isConnecting,
-    currentChat,
+    chats,
+    activeChatId,
     sendMessage,
     createChat,
     joinChat,
     switchChat,
+    setActiveChat,
+    getChatState,
     connect,
     disconnect,
   };
@@ -315,4 +423,41 @@ export const useChat = (): ChatContextType => {
     throw new Error("useChat must be used within a ChatProvider");
   }
   return context;
+};
+
+// Hook for working with specific chat by ID
+export const useChatById = (chatId: string) => {
+  const { 
+    getChatState, 
+    sendMessage, 
+    joinChat, 
+    setActiveChat, 
+    isConnected 
+  } = useChat();
+  
+  const chatState = chatId ? getChatState(chatId) : null;
+  
+  const sendMessageToChat = useCallback((message: string) => {
+    if (chatId && isConnected) {
+      setActiveChat(chatId);
+      sendMessage(message, chatId);
+    }
+  }, [chatId, isConnected, setActiveChat, sendMessage]);
+  
+  const joinThisChat = useCallback(() => {
+    if (chatId && isConnected) {
+      setActiveChat(chatId);
+      joinChat(chatId);
+    }
+  }, [chatId, isConnected, setActiveChat, joinChat]);
+  
+  return {
+    chatState,
+    sendMessage: sendMessageToChat,
+    joinChat: joinThisChat,
+    isConnected,
+    messages: chatState?.messages || [],
+    isTyping: chatState?.isTyping || false,
+    streamingMessage: chatState?.streamingMessage || ""
+  };
 }; 

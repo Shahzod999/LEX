@@ -3,7 +3,7 @@ const WebSocket = require("ws");
 // Конфигурация тестирования
 const CONFIG = {
   serverUrl: "ws://localhost:3000/ws/chat",
-  totalUsers: 2000, // количество пользователей
+  totalUsers: 10000, // количество пользователей
   connectionsPerUser: 2, // соединения на пользователя
   messagesPerConnection: 2, //  количество сообщений
   messageInterval: 4000, //  интервал

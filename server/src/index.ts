@@ -9,7 +9,10 @@ import chatRoutes from "./routes/chatRoutes";
 import documentRoutes from "./routes/documentRoutes";
 import uploadImages from "./routes/uploadImages";
 import { ChatWebSocketServer } from "./controllers/websocketController"; //new
-import { websocketHealthCheck, websocketMetrics } from "./middleware/websocketMonitoring";
+import {
+  websocketHealthCheck,
+  websocketMetrics,
+} from "./middleware/websocketMonitoring";
 
 dotenv.config();
 
@@ -37,7 +40,7 @@ app.use(cookieParser());
 // Connect to database
 connectDB();
 
-// Initialize WebSocket server
+// chatWS - экземпляр класса ChatWebSocketServer, который управляет WebSocket соединениями
 const chatWS = new ChatWebSocketServer(server);
 
 app.get("/", (_req, res) => {

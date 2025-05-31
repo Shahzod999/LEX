@@ -32,7 +32,6 @@ export const getChat = asyncHandler(
     const { id } = req.params;
     const userId = req.user?.userId;
 
-
     const chat = await Chat.findOne({
       _id: id,
       userId,
@@ -40,7 +39,6 @@ export const getChat = asyncHandler(
     })
       .populate("messages")
       .exec();
-
 
     // Если ID не указан, ищем или создаем чат по умолчанию
     if (!id || !chat) {
@@ -68,7 +66,6 @@ export const getChat = asyncHandler(
     }
 
     // Если ID указан, ищем конкретный чат
-
 
     res.status(200).json(chat);
   }
@@ -173,8 +170,16 @@ export const deleteUserChat = asyncHandler(
     // Delete the chat
     await chat.deleteOne();
 
-    res
-      .status(200)
-      .json({ message: "Chat and associated messages deleted successfully" });
+    const nextChat = await Chat.findOne({
+      userId: req.user?.userId,
+      sourceType: "manual",
+    })
+      .sort({ updatedAt: -1 })
+      .exec();
+
+    res.status(200).json({
+      message: "Chat and associated messages deleted successfully ",
+      nextChatId: nextChat?._id,
+    });
   }
 );

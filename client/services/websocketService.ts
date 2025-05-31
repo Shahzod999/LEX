@@ -1,3 +1,4 @@
+// WebSocketMessage определяет структуру сообщений между клиентом и сервером
 interface WebSocketMessage {
   type: "message" | "join_chat" | "create_chat" | "switch_chat";
   data: {
@@ -8,10 +9,11 @@ interface WebSocketMessage {
   };
 }
 
+// WebSocketResponse определяет структуру ответов от сервера
 interface WebSocketResponse {
-  type: 
+  type:
     | "connected"
-    | "authenticated" 
+    | "authenticated"
     | "chat_joined"
     | "chat_created"
     | "chat_switched"
@@ -23,6 +25,7 @@ interface WebSocketResponse {
   data: any;
 }
 
+// WebSocketChatService - класс, который управляет WebSocket соединениями и отправкой сообщений
 export class WebSocketChatService {
   private socket: WebSocket | null = null;
   private token: string;
@@ -36,16 +39,18 @@ export class WebSocketChatService {
     this.token = token;
   }
 
+  // соединение с сервером
   connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
-        const wsUrl = process.env.EXPO_PUBLIC_WS_URL || "ws://localhost:3000/ws/chat";
+        const wsUrl =
+          process.env.EXPO_PUBLIC_WS_URL || "ws://localhost:3000/ws/chat";
         this.socket = new WebSocket(wsUrl);
 
         this.socket.onopen = () => {
           console.log("WebSocket connected");
           this.reconnectAttempts = 0;
-          
+
           // Authenticate immediately upon connection
           this.send({
             type: "join_chat",
@@ -53,7 +58,7 @@ export class WebSocketChatService {
               token: this.token,
             },
           });
-          
+
           resolve();
         };
 
@@ -75,13 +80,13 @@ export class WebSocketChatService {
           console.error("WebSocket error:", error);
           reject(error);
         };
-
       } catch (error) {
         reject(error);
       }
     });
   }
 
+  // обработка сообщений от сервера
   private handleMessage(response: WebSocketResponse) {
     const handler = this.messageHandlers.get(response.type);
     if (handler) {
@@ -114,11 +119,14 @@ export class WebSocketChatService {
     }
   }
 
+  // обработка переподключения
   private handleReconnect() {
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectAttempts++;
-      console.log(`Attempting to reconnect... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
-      
+      console.log(
+        `Attempting to reconnect... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`
+      );
+
       setTimeout(() => {
         this.connect().catch(console.error);
       }, this.reconnectDelay * this.reconnectAttempts);
@@ -127,6 +135,7 @@ export class WebSocketChatService {
     }
   }
 
+  // соединение с чатом
   joinChat(chatId: string) {
     this.chatId = chatId;
     this.send({
@@ -138,6 +147,7 @@ export class WebSocketChatService {
     });
   }
 
+  // создание нового чата
   createChat() {
     this.send({
       type: "create_chat",
@@ -147,6 +157,7 @@ export class WebSocketChatService {
     });
   }
 
+  // переключение между чатами
   switchChat(chatId: string) {
     this.chatId = chatId;
     this.send({
@@ -157,6 +168,7 @@ export class WebSocketChatService {
     });
   }
 
+  // отправка сообщения
   sendMessage(message: string) {
     if (!this.chatId) {
       console.error("No chat joined. Create or join a chat first.");
@@ -171,6 +183,7 @@ export class WebSocketChatService {
     });
   }
 
+  // отправка сообщения
   private send(message: WebSocketMessage) {
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
       this.socket.send(JSON.stringify(message));
@@ -179,18 +192,22 @@ export class WebSocketChatService {
     }
   }
 
+  // обработка сообщений от сервера
   onMessage(type: string, handler: (data: any) => void) {
     this.messageHandlers.set(type, handler);
   }
 
+  // удаление обработчика сообщений
   offMessage(type: string) {
     this.messageHandlers.delete(type);
   }
 
+  // удаление всех обработчиков сообщений
   clearAllHandlers() {
     this.messageHandlers.clear();
   }
 
+  // отключение от сервера
   disconnect() {
     if (this.socket) {
       this.socket.close();
@@ -198,10 +215,12 @@ export class WebSocketChatService {
     }
   }
 
+  // проверка соединения
   isConnected(): boolean {
     return this.socket?.readyState === WebSocket.OPEN;
   }
 
+  // получение текущего чата
   getCurrentChatId(): string | null {
     return this.chatId;
   }
@@ -210,6 +229,7 @@ export class WebSocketChatService {
 // Singleton instance for global use
 let chatService: WebSocketChatService | null = null;
 
+// инициализация сервиса
 export const initializeChatService = (token: string): WebSocketChatService => {
   if (chatService) {
     chatService.clearAllHandlers();
@@ -219,10 +239,12 @@ export const initializeChatService = (token: string): WebSocketChatService => {
   return chatService;
 };
 
+// получение сервиса
 export const getChatService = (): WebSocketChatService | null => {
   return chatService;
 };
 
+// отключение сервиса
 export const disconnectChatService = () => {
   if (chatService) {
     chatService.disconnect();

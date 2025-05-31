@@ -79,12 +79,12 @@ class WebSocketMonitor {
     let status: 'healthy' | 'warning' | 'critical' = 'healthy';
 
     // Проверка нагрузки
-    if (this.metrics.totalConnections > 1500) {
+    if (this.metrics.totalConnections > 8000) {
       issues.push('High connection count');
       status = 'warning';
     }
 
-    if (this.metrics.totalConnections > 1800) {
+    if (this.metrics.totalConnections > 9000) {
       issues.push('Critical connection count');
       status = 'critical';
     }

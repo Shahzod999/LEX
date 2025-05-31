@@ -17,7 +17,7 @@ const Emergency = () => {
           ]}>
           <Text style={styles.infoTitle}>Need Urgent Help?</Text>
           <Text style={[styles.infoText, { color: colors.hint }]}>
-            We're here for you in critical situations
+            We&apos;re here for you in critical situations
           </Text>
           <TouchableOpacity style={styles.button}>
             <Text style={styles.buttonText}>Access Emergency Resources</Text>

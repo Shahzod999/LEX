@@ -11,7 +11,7 @@ export interface WebSocketConfig {
 }
 
 export const defaultWebSocketConfig: WebSocketConfig = {
-  maxConnections: parseInt(process.env.WS_MAX_CONNECTIONS || "2000"),
+  maxConnections: parseInt(process.env.WS_MAX_CONNECTIONS || "10000"),
   maxConnectionsPerUser: parseInt(
     process.env.WS_MAX_CONNECTIONS_PER_USER || "5"
   ),
@@ -23,14 +23,14 @@ export const defaultWebSocketConfig: WebSocketConfig = {
   inactiveTimeout: parseInt(process.env.WS_INACTIVE_TIMEOUT || "1800000"), // 30 минут
   maxPayload: parseInt(process.env.WS_MAX_PAYLOAD || "16384"), // 16KB
   maxMessageLength: parseInt(process.env.WS_MAX_MESSAGE_LENGTH || "4000"),
-  maxTokens: parseInt(process.env.WS_MAX_TOKENS || "2000"),
+  maxTokens: parseInt(process.env.WS_MAX_TOKENS || "10000"),
 };
 
 export const getWebSocketConfig = (): WebSocketConfig => {
   return {
     ...defaultWebSocketConfig,
     // Дополнительные проверки для продакшена
-    maxConnections: Math.min(defaultWebSocketConfig.maxConnections, 5000),
+    maxConnections: Math.min(defaultWebSocketConfig.maxConnections, 10000),
     maxConnectionsPerUser: Math.min(
       defaultWebSocketConfig.maxConnectionsPerUser,
       10
@@ -41,6 +41,5 @@ export const getWebSocketConfig = (): WebSocketConfig => {
     ),
   };
 };
-
 
 // shoha
