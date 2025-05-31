@@ -21,7 +21,7 @@ import {
 import { ChatHistoryType } from "@/types/chat";
 import { formatDate } from "@/utils/formatDate";
 import { Loading } from "./LoadingScreen";
-import { Swipeable } from "react-native-gesture-handler";
+import SwipeDelete from "./common/SwipeDelete";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -105,16 +105,8 @@ export default function ChatHistoryMenu({
     }
   };
 
-  const renderRightActions = (chatId: string) => (
-    <TouchableOpacity
-      style={styles.deleteButton}
-      onPress={() => handleDeleteChat(chatId)}>
-      <Ionicons name="trash" size={24} color="#9b67f5" />
-    </TouchableOpacity>
-  );
-
   const renderChatItem = ({ item }: { item: ChatHistoryType }) => (
-    <Swipeable renderRightActions={() => renderRightActions(item._id)}>
+    <SwipeDelete handleDelete={() => handleDeleteChat(item._id)}>
       <TouchableOpacity
         style={[styles.chatItem, { backgroundColor: colors.card }]}
         onPress={() => handleSelectChat(item._id)}
@@ -143,7 +135,7 @@ export default function ChatHistoryMenu({
         </View>
         <Ionicons name="chevron-forward" size={16} color={colors.hint} />
       </TouchableOpacity>
-    </Swipeable>
+    </SwipeDelete>
   );
 
   if (!visible && !isVisible) return null;
@@ -357,10 +349,5 @@ const styles = StyleSheet.create({
   separator: {
     height: StyleSheet.hairlineWidth,
     marginHorizontal: 16,
-  },
-  deleteButton: {
-    padding: 22,
-    justifyContent: "center",
-    alignItems: "center",
   },
 });

@@ -296,3 +296,28 @@ export const deleteDocs = asyncHandler(
     });
   }
 );
+
+export const updateDocument = asyncHandler(
+  async (req: AuthenticatedRequest, res: Response) => {
+    const doc = await Document.findById(req.params.id);
+
+    if (!doc) {
+      res.status(404);
+      throw new Error("Document not found");
+    }
+
+    doc.title = req?.body?.title || doc.title;
+    if (doc.info) {
+      doc.info.status = req?.body?.status || doc.info.status;
+      doc.info.deadline = req?.body?.deadline || doc.info.deadline;
+      doc.info.expirationDate =
+        req?.body?.expirationDate || doc.info.expirationDate;
+    }
+
+    await doc.save();
+
+    res.status(200).json({
+      message: "Document updated successfully",
+    });
+  }
+);

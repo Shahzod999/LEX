@@ -1,6 +1,6 @@
 // WebSocketMessage определяет структуру сообщений между клиентом и сервером
 interface WebSocketMessage {
-  type: "message" | "join_chat" | "create_chat" | "switch_chat";
+  type: "message" | "join_chat" | "switch_chat";
   data: {
     message?: string;
     chatId?: string;
@@ -15,7 +15,6 @@ interface WebSocketResponse {
     | "connected"
     | "authenticated"
     | "chat_joined"
-    | "chat_created"
     | "chat_switched"
     | "user_message"
     | "assistant_message_start"
@@ -105,10 +104,6 @@ export class WebSocketChatService {
         this.chatId = response.data.chatId;
         console.log("Joined chat:", response.data.chatId);
         break;
-      case "chat_created":
-        this.chatId = response.data.chatId;
-        console.log("Chat created:", response.data.chatId);
-        break;
       case "chat_switched":
         this.chatId = response.data.chatId;
         console.log("Switched to chat:", response.data.chatId);
@@ -143,16 +138,6 @@ export class WebSocketChatService {
       data: {
         token: this.token,
         chatId,
-      },
-    });
-  }
-
-  // создание нового чата // можно удалить не используется логика старая
-  createChat() {
-    this.send({
-      type: "create_chat",
-      data: {
-        token: this.token,
       },
     });
   }

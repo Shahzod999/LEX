@@ -1,11 +1,13 @@
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import React from "react";
 import ThemedCard from "../../ThemedCard";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@/context/ThemeContext";
 import { formatDate, formatDayMonthYear } from "@/utils/formatDate";
+import { router } from "expo-router";
 
 const Documents = ({
+  _id,
   title,
   documentType,
   status,
@@ -14,6 +16,7 @@ const Documents = ({
   description,
   expirationDate,
 }: {
+  _id: string;
   title: string;
   documentType: string;
   status: string;
@@ -23,6 +26,10 @@ const Documents = ({
   expirationDate?: string | null;
 }) => {
   const { colors } = useTheme();
+
+  const handleViewDetails = () => {
+    router.push(`/document/${_id}`);
+  };
   return (
     <ThemedCard style={styles.container}>
       <View style={styles.header}>
@@ -70,7 +77,7 @@ const Documents = ({
         )}
       </View>
 
-      <View style={styles.viewDetails}>
+      <TouchableOpacity style={styles.viewDetails} onPress={handleViewDetails}>
         <Text style={[styles.viewDetailsText, { color: colors.accent }]}>
           View Details
         </Text>
@@ -79,7 +86,7 @@ const Documents = ({
           size={18}
           color={colors.accent}
         />
-      </View>
+      </TouchableOpacity>
     </ThemedCard>
   );
 };

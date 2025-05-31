@@ -34,7 +34,6 @@ interface ChatContextType {
   chats: Map<string, ChatState>;
   activeChatId: string | null;
   sendMessage: (message: string, chatId?: string) => void;
-  createChat: () => void; // можно удалить не используется логика старая
   joinChat: (chatId: string) => void;
   switchChat: (chatId: string) => void;
   setActiveChat: (chatId: string) => void;
@@ -118,26 +117,6 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
           if (!activeChatId) {
             setActiveChatId(data.chatId);
           }
-        },
-
-        chat_created: (data: any) => {
-          console.log(`Created chat:`, data.chatId);
-          const chatState: ChatState = {
-            chatId: data.chatId,
-            messages: [],
-            isTyping: false,
-            streamingMessage: "",
-            lastActivity: new Date(),
-          };
-
-          setChats((prev) => {
-            const updated = new Map(prev);
-            updated.set(data.chatId, chatState);
-            return updated;
-          });
-
-          // Set as active chat
-          setActiveChatId(data.chatId);
         },
 
         chat_switched: (data: any) => {
@@ -334,19 +313,6 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     [onError, activeChatId]
   );
 
-  // Create new chat // можно удалить не используется логика старая
-  const createChat = useCallback(() => {
-    const service = chatServiceRef.current;
-    if (service && service.isConnected()) {
-      service.createChat();
-    } else {
-      console.error("WebSocket not connected");
-      if (onError) {
-        onError("Not connected to chat server");
-      }
-    }
-  }, [onError]);
-
   // Join existing chat by ID
   const joinChat = useCallback(
     (chatId: string) => {
@@ -426,7 +392,6 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     chats,
     activeChatId,
     sendMessage,
-    createChat, // можно удалить не используется логика старая
     joinChat,
     switchChat,
     setActiveChat,

@@ -435,7 +435,7 @@ export class ChatWebSocketServer {
     );
   }
 
-  // создание нового чата // можно удалить не используется логика старая
+  // создание нового чата используется только для тестировки в файле loadTest.js
   private async handleCreateChat(
     ws: AuthenticatedWebSocket,
     message: WebSocketMessage

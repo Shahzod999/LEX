@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useCallback } from "react";
 import { Text, StyleSheet, Animated, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../context/ThemeContext";
@@ -29,8 +29,9 @@ const Toast: React.FC<ToastProps> = ({
     new Animated.Value(position === "top" ? -100 : 100)
   ).current;
   const opacity = useRef(new Animated.Value(0)).current;
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const getToastConfig = () => {
+  const getToastConfig = useCallback(() => {
     switch (type) {
       case "success":
         return {
@@ -63,38 +64,14 @@ const Toast: React.FC<ToastProps> = ({
           iconColor: "#FFFFFF",
         };
     }
-  };
+  }, [type, colors.accent]);
 
-  const config = getToastConfig();
-
-  useEffect(() => {
-    if (visible) {
-      // Показываем toast
-      Animated.parallel([
-        Animated.timing(translateY, {
-          toValue: 0,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacity, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-      ]).start();
-
-      // Автоматически скрываем через заданное время
-      const timer = setTimeout(() => {
-        hideToast();
-      }, duration);
-
-      return () => clearTimeout(timer);
-    } else {
-      hideToast();
+  const hideToast = useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
     }
-  }, [visible]);
-
-  const hideToast = () => {
+    
     Animated.parallel([
       Animated.timing(translateY, {
         toValue: position === "top" ? -100 : 100,
@@ -109,7 +86,47 @@ const Toast: React.FC<ToastProps> = ({
     ]).start(() => {
       onHide();
     });
-  };
+  }, [translateY, opacity, position, onHide]);
+
+  const showToast = useCallback(() => {
+    Animated.parallel([
+      Animated.timing(translateY, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    // Автоматически скрываем через заданное время
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+    }
+    timerRef.current = setTimeout(() => {
+      hideToast();
+    }, duration);
+  }, [translateY, opacity, duration, hideToast]);
+
+  useEffect(() => {
+    if (visible) {
+      showToast();
+    } else {
+      hideToast();
+    }
+
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [visible, showToast, hideToast]);
+
+  const config = getToastConfig();
 
   if (!visible) return null;
 

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useCallback } from 'react';
 import Toast, { ToastType } from '../components/Toast';
 
 interface ToastState {
@@ -38,7 +38,7 @@ export const ToastProvider: React.FC<ToastProviderProps> = ({ children }) => {
     position: 'top',
   });
 
-  const showToast = (
+  const showToast = useCallback((
     message: string,
     type: ToastType,
     duration: number = 3000,
@@ -51,27 +51,27 @@ export const ToastProvider: React.FC<ToastProviderProps> = ({ children }) => {
       duration,
       position,
     });
-  };
+  }, []);
 
-  const showSuccess = (message: string, duration: number = 3000) => {
+  const showSuccess = useCallback((message: string, duration: number = 3000) => {
     showToast(message, 'success', duration);
-  };
+  }, [showToast]);
 
-  const showError = (message: string, duration: number = 4000) => {
+  const showError = useCallback((message: string, duration: number = 4000) => {
     showToast(message, 'error', duration);
-  };
+  }, [showToast]);
 
-  const showWarning = (message: string, duration: number = 3500) => {
+  const showWarning = useCallback((message: string, duration: number = 3500) => {
     showToast(message, 'warning', duration);
-  };
+  }, [showToast]);
 
-  const showInfo = (message: string, duration: number = 3000) => {
+  const showInfo = useCallback((message: string, duration: number = 3000) => {
     showToast(message, 'info', duration);
-  };
+  }, [showToast]);
 
-  const hideToast = () => {
+  const hideToast = useCallback(() => {
     setToastState(prev => ({ ...prev, visible: false }));
-  };
+  }, []);
 
   const contextValue: ToastContextType = {
     showToast,

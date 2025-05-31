@@ -1,4 +1,10 @@
-import { DocumentTypes, DocumentUploadResponseTypes } from "@/types/scan";
+import {
+  CurrentDocumentResponseType,
+  DocumentTypes,
+  DocumentUploadResponseTypes,
+  Info,
+  UpdateDocumentType,
+} from "@/types/scan";
 import { apiSlice } from "../apiSlice";
 
 export const documentApiSlice = apiSlice.injectEndpoints({
@@ -17,15 +23,28 @@ export const documentApiSlice = apiSlice.injectEndpoints({
       }),
       providesTags: ["Document"],
     }),
-    getUserDocument: builder.query<DocumentTypes, string>({
+    getUserCurrentDocument: builder.query<CurrentDocumentResponseType, string>({
       query: (documentId) => ({
         url: `/documents/${documentId}`,
       }),
+      providesTags: ["Document"],
     }),
     deleteDocument: builder.mutation<{ message: string }, string>({
       query: (documentId) => ({
         url: `/documents/${documentId}`,
         method: "DELETE",
+      }),
+      invalidatesTags: ["Document", "Chat"],
+    }),
+
+    updateDocument: builder.mutation<
+      { message: string },
+      { id: string; body: UpdateDocumentType }
+    >({
+      query: ({ id, body }) => ({
+        url: `/documents/${id}`,
+        method: "PUT",
+        body,
       }),
       invalidatesTags: ["Document", "Chat"],
     }),
@@ -35,6 +54,7 @@ export const documentApiSlice = apiSlice.injectEndpoints({
 export const {
   useUploadDocumentMutation,
   useGetUserDocumentsQuery,
-  useGetUserDocumentQuery,
+  useGetUserCurrentDocumentQuery,
   useDeleteDocumentMutation,
+  useUpdateDocumentMutation,
 } = documentApiSlice;
