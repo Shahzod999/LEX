@@ -10,19 +10,22 @@ import {
   Animated,
   TouchableWithoutFeedback,
   Modal,
+  SafeAreaView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useMenu } from "../context/MenuContext";
 import { useTheme } from "../context/ThemeContext";
 import { router } from "expo-router";
-import {
-  getTokenFromSecureStore,
-  removeTokenFromSecureStore,
-} from "@/utils/secureStore";
-import { selectToken, setToken, clearToken } from "@/redux/features/tokenSlice";
+import { removeTokenFromSecureStore } from "@/utils/secureStore";
+import { clearToken } from "@/redux/features/tokenSlice";
 import { useAppDispatch, useAppSelector } from "@/hooks/reduxHooks";
+import { apiSlice } from "@/redux/api/apiSlice";
+import { getValidatedUrl } from "@/utils/ValidateImg";
+import { selectUser } from "@/redux/features/userSlice";
 
 export default function SlideMenu() {
+  const profile = useAppSelector(selectUser);
+
   const dispatch = useAppDispatch();
   const { menuVisible, hideMenu } = useMenu();
   const { isDarkMode, toggleTheme, colors } = useTheme();
@@ -86,9 +89,14 @@ export default function SlideMenu() {
 
   const handleLogout = async () => {
     hideMenu();
-    await removeTokenFromSecureStore();
-    dispatch(clearToken());
-    router.replace("/login");
+    try {
+      await removeTokenFromSecureStore();
+      dispatch(clearToken());
+      router.replace("/login");
+      dispatch(apiSlice.util.resetApiState());
+    } catch (error) {
+      console.error(error);
+    }
   };
 
   const navigateTo = (route: string) => {
@@ -120,250 +128,250 @@ export default function SlideMenu() {
               backgroundColor: colors.card,
             },
           ]}>
-          <ScrollView style={styles.scrollContent}>
-            {/* Close Button */}
-            <TouchableOpacity style={styles.closeButton} onPress={hideMenu}>
-              <Ionicons name="close" size={24} color={colors.text} />
-            </TouchableOpacity>
+          <SafeAreaView style={{ flex: 1 }}>
+            <ScrollView style={styles.scrollContent}>
+              {/* Close Button */}
+              <TouchableOpacity style={styles.closeButton} onPress={hideMenu}>
+                <Ionicons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
 
-            {/* User Profile Header */}
-            <View style={styles.profileHeader}>
-              <Image
-                source={{ uri: "https://via.placeholder.com/60" }}
-                style={styles.avatar}
-              />
-              <View style={styles.profileInfo}>
-                <Text style={[styles.userName, { color: colors.text }]}>
-                  Hi John
-                </Text>
-                <Text
-                  style={[
-                    styles.welcomeText,
-                    { color: isDarkMode ? "#AAAAAA" : "#666666" },
-                  ]}>
-                  Welcome Back!
-                </Text>
-                <View
-                  style={[
-                    styles.badge,
-                    { backgroundColor: colors.accent + "20" },
-                  ]}>
-                  <Text style={[styles.badgeText, { color: colors.accent }]}>
-                    Free User
+              {/* User Profile Header */}
+              <View style={styles.profileHeader}>
+                <Image
+                  source={{
+                    uri: getValidatedUrl(profile?._id, profile?.profilePicture),
+                  }}
+                  style={styles.avatar}
+                />
+                <View style={styles.profileInfo}>
+                  <Text style={[styles.userName, { color: colors.text }]}>
+                    Hi {profile?.name}
                   </Text>
+                  <Text style={[styles.welcomeText, { color: colors.hint }]}>
+                    Welcome Back!
+                  </Text>
+                  <View
+                    style={[
+                      styles.badge,
+                      { backgroundColor: colors.accent + "20" },
+                    ]}>
+                    <Text style={[styles.badgeText, { color: colors.accent }]}>
+                      Free User
+                    </Text>
+                  </View>
                 </View>
               </View>
-            </View>
 
-            {/* Divider */}
-            <View
-              style={[
-                styles.divider,
-                { backgroundColor: isDarkMode ? "#444444" : "#EEEEEE" },
-              ]}
-            />
+              {/* Divider */}
+              <View
+                style={[styles.divider, { backgroundColor: colors.border }]}
+              />
 
-            {/* Profile Section */}
-            <View style={styles.section}>
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => navigateTo("account-settings")}>
-                <Ionicons name="person-outline" size={22} color={colors.text} />
-                <Text style={[styles.menuItemText, { color: colors.text }]}>
-                  Account Settings
-                </Text>
-              </TouchableOpacity>
+              {/* Profile Section */}
+              <View style={styles.section}>
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => navigateTo("account-settings")}>
+                  <Ionicons
+                    name="person-outline"
+                    size={22}
+                    color={colors.text}
+                  />
+                  <Text style={[styles.menuItemText, { color: colors.text }]}>
+                    Account Settings
+                  </Text>
+                </TouchableOpacity>
 
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => navigateTo("subscription")}>
-                <Ionicons name="card-outline" size={22} color={colors.text} />
-                <Text style={[styles.menuItemText, { color: colors.text }]}>
-                  Subscription
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Preferences Section */}
-            <View style={styles.section}>
-              <Text
-                style={[
-                  styles.sectionTitle,
-                  { color: isDarkMode ? "#AAAAAA" : "#999999" },
-                ]}>
-                PREFERENCES
-              </Text>
-
-              <View style={styles.menuItem}>
-                <Ionicons name="moon-outline" size={22} color={colors.text} />
-                <Text style={[styles.menuItemText, { color: colors.text }]}>
-                  Dark Mode
-                </Text>
-                <Switch
-                  value={isDarkMode}
-                  onValueChange={toggleTheme}
-                  style={styles.switch}
-                  trackColor={{ false: "#767577", true: colors.accent + "80" }}
-                  thumbColor={isDarkMode ? colors.accent : "#f4f3f4"}
-                />
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => navigateTo("subscription")}>
+                  <Ionicons name="card-outline" size={22} color={colors.text} />
+                  <Text style={[styles.menuItemText, { color: colors.text }]}>
+                    Subscription
+                  </Text>
+                </TouchableOpacity>
               </View>
 
-              <View style={styles.menuItem}>
-                <Ionicons
-                  name="notifications-outline"
-                  size={22}
-                  color={colors.text}
-                />
-                <Text style={[styles.menuItemText, { color: colors.text }]}>
-                  Notifications
+              {/* Preferences Section */}
+              <View style={styles.section}>
+                <Text style={[styles.sectionTitle, { color: colors.hint }]}>
+                  PREFERENCES
                 </Text>
-                <Switch
-                  value={notifications}
-                  onValueChange={setNotifications}
-                  style={styles.switch}
-                  trackColor={{ false: "#767577", true: colors.accent + "80" }}
-                  thumbColor={notifications ? colors.accent : "#red"}
-                />
-              </View>
 
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => setLanguageDropdownOpen(!languageDropdownOpen)}>
-                <Ionicons
-                  name="language-outline"
-                  size={22}
-                  color={colors.text}
-                />
-                <Text style={[styles.menuItemText, { color: colors.text }]}>
-                  Language
-                </Text>
-                <Ionicons
-                  name={languageDropdownOpen ? "chevron-up" : "chevron-down"}
-                  size={16}
-                  color={colors.text}
-                  style={styles.chevron}
-                />
-              </TouchableOpacity>
+                <View style={styles.menuItem}>
+                  <Ionicons name="moon-outline" size={22} color={colors.text} />
+                  <Text style={[styles.menuItemText, { color: colors.text }]}>
+                    Dark Mode
+                  </Text>
+                  <Switch
+                    value={isDarkMode}
+                    onValueChange={toggleTheme}
+                    style={styles.switch}
+                    trackColor={{
+                      false: "#767577",
+                      true: colors.accent + "80",
+                    }}
+                    thumbColor={isDarkMode ? colors.accent : "white"}
+                  />
+                </View>
 
-              {languageDropdownOpen && (
-                <View
-                  style={[
-                    styles.dropdownContainer,
-                    { backgroundColor: isDarkMode ? "#252830" : "#F5F5F5" },
-                  ]}>
-                  {languages.map((language, index) => (
-                    <TouchableOpacity
-                      key={index}
-                      style={[
-                        styles.dropdownItem,
-                        selectedLanguage === language && {
-                          backgroundColor: colors.accent + "30",
-                        },
-                      ]}
-                      onPress={() => {
-                        setSelectedLanguage(language);
-                        setLanguageDropdownOpen(false);
-                      }}>
-                      <Text
+                <View style={styles.menuItem}>
+                  <Ionicons
+                    name="notifications-outline"
+                    size={22}
+                    color={colors.text}
+                  />
+                  <Text style={[styles.menuItemText, { color: colors.text }]}>
+                    Notifications
+                  </Text>
+                  <Switch
+                    value={notifications}
+                    onValueChange={setNotifications}
+                    style={styles.switch}
+                    trackColor={{
+                      false: "#767577",
+                      true: colors.accent + "80",
+                    }}
+                    thumbColor={notifications ? colors.accent : "white"}
+                  />
+                </View>
+
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() =>
+                    setLanguageDropdownOpen(!languageDropdownOpen)
+                  }>
+                  <Ionicons
+                    name="language-outline"
+                    size={22}
+                    color={colors.text}
+                  />
+                  <Text style={[styles.menuItemText, { color: colors.text }]}>
+                    Language
+                  </Text>
+                  <Ionicons
+                    name={languageDropdownOpen ? "chevron-up" : "chevron-down"}
+                    size={16}
+                    color={colors.text}
+                    style={styles.chevron}
+                  />
+                </TouchableOpacity>
+
+                {languageDropdownOpen && (
+                  <View
+                    style={[
+                      styles.dropdownContainer,
+                      { backgroundColor: colors.darkBackground },
+                    ]}>
+                    {languages.map((language, index) => (
+                      <TouchableOpacity
+                        key={index}
                         style={[
-                          styles.dropdownItemText,
-                          { color: colors.text },
+                          styles.dropdownItem,
                           selectedLanguage === language && {
-                            color: colors.accent,
-                            fontWeight: "500",
+                            backgroundColor: colors.accent + "30",
                           },
-                        ]}>
-                        {language}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-            </View>
+                        ]}
+                        onPress={() => {
+                          setSelectedLanguage(language);
+                          setLanguageDropdownOpen(false);
+                        }}>
+                        <Text
+                          style={[
+                            styles.dropdownItemText,
+                            { color: colors.text },
+                            selectedLanguage === language && {
+                              color: colors.accent,
+                              fontWeight: "500",
+                            },
+                          ]}>
+                          {language}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
 
-            {/* Support Section */}
-            <View style={styles.section}>
-              <Text
-                style={[
-                  styles.sectionTitle,
-                  { color: isDarkMode ? "#AAAAAA" : "#999999" },
-                ]}>
-                SUPPORT
-              </Text>
+              {/* Support Section */}
+              <View style={styles.section}>
+                <Text style={[styles.sectionTitle, { color: colors.hint }]}>
+                  SUPPORT
+                </Text>
+
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => navigateTo("help-center")}>
+                  <Ionicons
+                    name="help-circle-outline"
+                    size={22}
+                    color={colors.text}
+                  />
+                  <Text style={[styles.menuItemText, { color: colors.text }]}>
+                    Help Center
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => navigateTo("resources")}>
+                  <Ionicons name="book-outline" size={22} color={colors.text} />
+                  <Text style={[styles.menuItemText, { color: colors.text }]}>
+                    Find Resources
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => setLegalDropdownOpen(!legalDropdownOpen)}>
+                  <Ionicons
+                    name="document-text-outline"
+                    size={22}
+                    color={colors.text}
+                  />
+                  <Text style={[styles.menuItemText, { color: colors.text }]}>
+                    Legal
+                  </Text>
+                  <Ionicons
+                    name={legalDropdownOpen ? "chevron-up" : "chevron-down"}
+                    size={16}
+                    color={colors.text}
+                    style={styles.chevron}
+                  />
+                </TouchableOpacity>
+
+                {legalDropdownOpen && (
+                  <View
+                    style={[
+                      styles.dropdownContainer,
+                      { backgroundColor: colors.darkBackground },
+                    ]}>
+                    {legalItems.map((item, index) => (
+                      <TouchableOpacity
+                        key={index}
+                        style={styles.dropdownItem}
+                        onPress={() => navigateTo(item.route)}>
+                        <Text
+                          style={[
+                            styles.dropdownItemText,
+                            { color: colors.text },
+                          ]}>
+                          {item.title}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
 
               <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => navigateTo("help-center")}>
-                <Ionicons
-                  name="help-circle-outline"
-                  size={22}
-                  color={colors.text}
-                />
-                <Text style={[styles.menuItemText, { color: colors.text }]}>
-                  Help Center
-                </Text>
+                style={[styles.logoutButton, { backgroundColor: "#F44336" }]}
+                onPress={handleLogout}>
+                <Ionicons name="log-out-outline" size={22} color="white" />
+                <Text style={styles.logoutText}>Logout</Text>
               </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => navigateTo("resources")}>
-                <Ionicons name="book-outline" size={22} color={colors.text} />
-                <Text style={[styles.menuItemText, { color: colors.text }]}>
-                  Find Resources
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => setLegalDropdownOpen(!legalDropdownOpen)}>
-                <Ionicons
-                  name="document-text-outline"
-                  size={22}
-                  color={colors.text}
-                />
-                <Text style={[styles.menuItemText, { color: colors.text }]}>
-                  Legal
-                </Text>
-                <Ionicons
-                  name={legalDropdownOpen ? "chevron-up" : "chevron-down"}
-                  size={16}
-                  color={colors.text}
-                  style={styles.chevron}
-                />
-              </TouchableOpacity>
-
-              {legalDropdownOpen && (
-                <View
-                  style={[
-                    styles.dropdownContainer,
-                    { backgroundColor: isDarkMode ? "#252830" : "#F5F5F5" },
-                  ]}>
-                  {legalItems.map((item, index) => (
-                    <TouchableOpacity
-                      key={index}
-                      style={styles.dropdownItem}
-                      onPress={() => navigateTo(item.route)}>
-                      <Text
-                        style={[
-                          styles.dropdownItemText,
-                          { color: colors.text },
-                        ]}>
-                        {item.title}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-            </View>
-
-            {/* Logout Button */}
-            <TouchableOpacity
-              style={[styles.logoutButton, { backgroundColor: "#F44336" }]}
-              onPress={handleLogout}>
-              <Ionicons name="log-out-outline" size={22} color="white" />
-              <Text style={styles.logoutText}>Logout</Text>
-            </TouchableOpacity>
-          </ScrollView>
+            </ScrollView>
+          </SafeAreaView>
         </Animated.View>
       </View>
     </Modal>
@@ -385,6 +393,9 @@ const styles = StyleSheet.create({
   closeButton: {
     alignSelf: "flex-end",
     padding: 15,
+    position: "absolute",
+    top: 0,
+    right: 0,
   },
   sidebar: {
     width: 300,

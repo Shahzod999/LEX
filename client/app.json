@@ -8,16 +8,24 @@
     "scheme": "client",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Это приложение использует ваше местоположение для предоставления актуальных новостей в вашем регионе.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Это приложение использует ваше местоположение для предоставления актуальных новостей в вашем регионе."
+      }
     },
+
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "permissions": ["ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION"]
     },
+
     "web": {
       "bundler": "metro",
       "output": "static",
@@ -34,7 +42,14 @@
           "backgroundColor": "#ffffff"
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Позволить $(PRODUCT_NAME) использовать ваше местоположение."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

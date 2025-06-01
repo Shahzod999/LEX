@@ -10,7 +10,8 @@ import { useRouter } from "expo-router";
 import { useAppSelector } from "@/hooks/reduxHooks";
 import { selectToken } from "@/redux/features/tokenSlice";
 import { getTokenFromSecureStore } from "@/utils/secureStore";
-import LoadingScreen from "@/components/LoadingScreen";
+import LoadingScreen from "@/components/common/LoadingScreen";
+import { useGetProfileQuery } from "@/redux/api/endpoints/authApiSlice";
 
 export default function TabsLayout() {
   const { toggleMenu } = useMenu();
@@ -18,6 +19,8 @@ export default function TabsLayout() {
   const router = useRouter();
   const token = useAppSelector(selectToken);
   const [checkingToken, setCheckingToken] = useState(true);
+
+  useGetProfileQuery(undefined, { skip: !token });
 
   useEffect(() => {
     if (token) {
@@ -41,10 +44,7 @@ export default function TabsLayout() {
   };
 
   return (
-    <ChatProvider 
-      token={token || ""} 
-      onError={handleChatError}
-    >
+    <ChatProvider token={token || ""} onError={handleChatError}>
       <View style={{ flex: 1, backgroundColor: colors.background }}>
         <Tabs
           screenOptions={{

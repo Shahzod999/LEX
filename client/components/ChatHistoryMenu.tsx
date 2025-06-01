@@ -20,7 +20,7 @@ import {
 } from "@/redux/api/endpoints/chatApiSlice";
 import { ChatHistoryType } from "@/types/chat";
 import { formatDate } from "@/utils/formatDate";
-import { Loading } from "./LoadingScreen";
+import { Loading } from "./common/LoadingScreen";
 import SwipeDelete from "./common/SwipeDelete";
 
 const { width: screenWidth } = Dimensions.get("window");

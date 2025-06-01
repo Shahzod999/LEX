@@ -1,15 +1,13 @@
-import { useEffect, useContext, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "expo-router";
-import { useTheme } from "../context/ThemeContext";
 import { useAppDispatch, useAppSelector } from "@/hooks/reduxHooks";
 import { getTokenFromSecureStore } from "@/utils/secureStore";
 import { selectToken, setToken } from "@/redux/features/tokenSlice";
-import LoadingScreen from "@/components/LoadingScreen";
+import LoadingScreen from "@/components/common/LoadingScreen";
 
 export default function Index() {
   const router = useRouter();
   const dispatch = useAppDispatch();
-  const { colors } = useTheme();
   const [isLoading, setIsLoading] = useState(true);
   const token = useAppSelector(selectToken);
 

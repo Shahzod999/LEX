@@ -71,7 +71,7 @@ const RegisterScreen = () => {
             onLanguageSelect={handleLanguageSelect}
           />
           <View style={styles.buttonContainer}>
-            <ThemedButton title="Login" onPress={() => router.back()} />
+            <ThemedButton title="Login" onPress={() => router.push("/login")} />
             <ThemedButton
               title="Continue"
               onPress={handleContinue}

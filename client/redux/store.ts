@@ -3,12 +3,14 @@ import { setupListeners } from "@reduxjs/toolkit/query";
 import { AiApiSlice } from "./api/AiApiSlice";
 import tokenSlice from "./features/tokenSlice";
 import { apiSlice } from "./api/apiSlice";
+import userSlice from "./features/userSlice";
 
 export const store = configureStore({
   reducer: {
     [AiApiSlice.reducerPath]: AiApiSlice.reducer,
     [apiSlice.reducerPath]: apiSlice.reducer,
     token: tokenSlice,
+    user: userSlice,
   },
 
   middleware: (getDefaultMiddleware) =>

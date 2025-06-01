@@ -6,6 +6,7 @@ import {
   ProfileResponseType,
   UpdateProfileType,
 } from "@/types/login";
+import { setUser } from "@/redux/features/userSlice";
 
 interface LoginCredentials {
   email: string;
@@ -56,6 +57,14 @@ export const authApiSlice = apiSlice.injectEndpoints({
         url: "/users/profile",
       }),
       providesTags: ["Profile"],
+      async onQueryStarted(_, { dispatch, queryFulfilled }) {
+        try {
+          const { data } = await queryFulfilled;
+          dispatch(setUser(data.data.user));
+        } catch (error) {
+          console.log(error);
+        }
+      },
     }),
 
     updateProfile: builder.mutation<ProfileResponseType, UpdateProfileType>({

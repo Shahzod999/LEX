@@ -23,6 +23,6 @@ router.delete("/delete", authenticate, deleteUploads);
 // Публичные маршруты для логотипов (без аутентификации)
 router.get("/:userId/logo/:filename", getPublicLogo);
 
-router.get("/:userId/:type/:filename", authenticate, getUploadedByRoute);
+router.get("/uploads/:userId/:type/:filename", authenticate, getUploadedByRoute);
 
 export default router;

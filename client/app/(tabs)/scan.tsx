@@ -28,7 +28,7 @@ import {
   useDeleteDocumentMutation,
   useUploadDocumentMutation,
 } from "@/redux/api/endpoints/documentApiSlice";
-import { Loading } from "@/components/LoadingScreen";
+import { Loading } from "@/components/common/LoadingScreen";
 
 // Document interface
 interface ScannedDocument {

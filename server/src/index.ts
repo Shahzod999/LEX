@@ -53,6 +53,10 @@ app.use("/api/documents", documentRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/upload", uploadImages);
 
+
+
+
+
 // WebSocket monitoring endpoints
 app.get("/api/websocket/health", websocketHealthCheck);
 app.get("/api/websocket/metrics", websocketMetrics);

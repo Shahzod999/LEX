@@ -13,10 +13,7 @@ import {
 import ThemedScreen from "../../components/ThemedScreen";
 import { useTheme } from "../../context/ThemeContext";
 import { useToast } from "../../context/ToastContext";
-import {
-  useGetProfileQuery,
-  useUpdateProfileMutation,
-} from "@/redux/api/endpoints/authApiSlice";
+import { useUpdateProfileMutation } from "@/redux/api/endpoints/authApiSlice";
 import ThemedButton from "@/components/ThemedButton";
 import ThemedCard from "@/components/ThemedCard";
 import * as ImagePicker from "expo-image-picker";
@@ -26,24 +23,26 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import BottomModal from "@/components/Modal/BottomModal";
 import { getValidatedUrl } from "@/utils/ValidateImg";
 import { useUploadImageMutation } from "@/redux/api/endpoints/uploadApi";
-import { Loading } from "@/components/LoadingScreen";
+import { Loading } from "@/components/common/LoadingScreen";
+import { useAppSelector } from "@/hooks/reduxHooks";
+import { selectUser } from "@/redux/features/userSlice";
 
 export default function AccountSettings() {
   const { colors } = useTheme();
   const { showSuccess, showError } = useToast();
-  const { data: profile, isLoading: isProfileLoading } = useGetProfileQuery();
+  const profile = useAppSelector(selectUser);
   const [updateProfile, { isLoading }] = useUpdateProfileMutation();
   const [uploadImage, { isLoading: isUploading }] = useUploadImageMutation();
 
   const [formData, setFormData] = useState({
-    name: profile?.data.user.name || "",
-    email: profile?.data.user.email || "",
-    bio: profile?.data.user.bio || "",
-    phoneNumber: profile?.data.user.phoneNumber || "",
-    nationality: profile?.data.user.nationality || "",
-    language: profile?.data.user.language || "",
-    dateOfBirth: profile?.data.user.dateOfBirth
-      ? new Date(profile?.data.user.dateOfBirth)
+    name: profile?.name || "",
+    email: profile?.email || "",
+    bio: profile?.bio || "",
+    phoneNumber: profile?.phoneNumber || "",
+    nationality: profile?.nationality || "",
+    language: profile?.language || "",
+    dateOfBirth: profile?.dateOfBirth
+      ? new Date(profile?.dateOfBirth)
       : new Date(),
   });
 
@@ -83,7 +82,7 @@ export default function AccountSettings() {
         quality: 0.8,
       });
 
-      if (!result.canceled && result.assets?.[0]?.uri && profile?.data.user) {
+      if (!result.canceled && result.assets?.[0]?.uri && profile) {
         try {
           const res = await uploadImg(result.assets[0].uri);
 
@@ -130,9 +129,9 @@ export default function AccountSettings() {
 
   const handleSubmit = async () => {
     try {
-      if (profile?.data.user) {
+      if (profile) {
         await updateProfile({
-          ...profile.data.user,
+          ...profile,
           ...formData,
           dateOfBirth: formData.dateOfBirth.toISOString(),
         }).unwrap();
@@ -146,7 +145,7 @@ export default function AccountSettings() {
 
   const handlePasswordChange = async () => {
     try {
-      if (profile?.data.user) {
+      if (profile) {
         await updateProfile({
           oldPassword: passwordData.oldPassword,
           password: passwordData.password,
@@ -161,25 +160,25 @@ export default function AccountSettings() {
   };
 
   useEffect(() => {
-    if (profile?.data.user) {
+    if (profile) {
       setFormData((prev) => ({
         ...prev,
-        name: profile.data.user.name,
-        email: profile.data.user.email,
-        phoneNumber: profile.data.user.phoneNumber,
-        nationality: profile.data.user.nationality,
-        language: profile.data.user.language,
-        dateOfBirth: profile.data.user.dateOfBirth
-          ? new Date(profile.data.user.dateOfBirth)
+        name: profile.name,
+        email: profile.email,
+        phoneNumber: profile.phoneNumber,
+        nationality: profile.nationality,
+        language: profile.language,
+        dateOfBirth: profile.dateOfBirth
+          ? new Date(profile.dateOfBirth)
           : new Date(),
-        bio: profile.data.user.bio,
+        bio: profile.bio,
       }));
     }
   }, [profile]);
 
   return (
     <ThemedScreen>
-      {isProfileLoading && <Loading />}
+      {isLoading && <Loading />}
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === "ios" ? "padding" : "height"}>
@@ -196,13 +195,10 @@ export default function AccountSettings() {
                   size="large"
                 />
               )}
-              {profile?.data.user.profilePicture ? (
+              {profile?.profilePicture ? (
                 <Image
                   source={{
-                    uri: getValidatedUrl(
-                      profile.data.user._id,
-                      profile.data.user.profilePicture
-                    ),
+                    uri: getValidatedUrl(profile._id, profile.profilePicture),
                   }}
                   style={styles.profileImage}
                 />
@@ -224,10 +220,10 @@ export default function AccountSettings() {
               </View>
             </TouchableOpacity>
             <Text style={[styles.name, { color: colors.text }]}>
-              {profile?.data.user.name}
+              {profile?.name}
             </Text>
             <Text style={[styles.email, { color: colors.hint }]}>
-              {profile?.data.user.email}
+              {profile?.email}
             </Text>
           </ThemedCard>
 

@@ -211,7 +211,10 @@ export const getUploadedByRoute = asyncHandler(
     if (req.user?.userId !== userId) {
       throw new Error("Access denied");
     }
+
+    
     const filePath = path.join("uploads", userId, type, filename);
+    console.log(filePath);
 
     // Проверка: существует ли файл
     if (!fs.existsSync(filePath)) {
