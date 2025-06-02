@@ -1,14 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  Animated,
-  StyleSheet,
-  LayoutChangeEvent,
-  Modal,
-  FlatList,
-} from "react-native";
+import { View, Text, TouchableOpacity, Animated, StyleSheet, LayoutChangeEvent, Modal, FlatList } from "react-native";
 import { useTheme } from "@/context/ThemeContext";
 interface TabsTypes {
   id: string;
@@ -23,18 +14,11 @@ interface TabsProps {
   activeTab?: string;
 }
 
-const ToggleTabsRN: React.FC<TabsProps> = ({
-  tabs,
-  onTabChange,
-  setOrderType,
-  activeTab: externalActiveTab,
-}) => {
+const ToggleTabsRN: React.FC<TabsProps> = ({ tabs, onTabChange, setOrderType, activeTab: externalActiveTab }) => {
   const { colors } = useTheme();
   const [internalActiveTab, setInternalActiveTab] = useState(tabs[0].id);
-  const activeTab =
-    externalActiveTab !== undefined ? externalActiveTab : internalActiveTab;
+  const activeTab = externalActiveTab !== undefined ? externalActiveTab : internalActiveTab;
   const [tabWidths, setTabWidths] = useState<{ [key: string]: number }>({});
-  const [containerWidth, setContainerWidth] = useState(0);
   const [showDropdown, setShowDropdown] = useState(false);
   const slideAnim = useRef(new Animated.Value(0)).current;
 
@@ -73,36 +57,23 @@ const ToggleTabsRN: React.FC<TabsProps> = ({
     }));
   };
 
-  const onContainerLayout = (event: LayoutChangeEvent) => {
-    const { width } = event.nativeEvent.layout;
-    setContainerWidth(width);
-  };
-
   const getIndicatorWidth = () => {
     const activeIndex = visibleTabs.findIndex((tab) => tab.id === activeTab);
     return tabWidths[visibleTabs[activeIndex]?.id] || 0;
   };
 
   const renderDropdownItem = ({ item }: { item: TabsTypes }) => (
-    <TouchableOpacity
-      style={[styles.dropdownItem, { borderBottomColor: colors.border }]}
-      onPress={() => handleTabChange(item)}>
+    <TouchableOpacity style={[styles.dropdownItem, { borderBottomColor: colors.border }]} onPress={() => handleTabChange(item)}>
       <Text
-        style={[
-          styles.dropdownItemText,
-          { color: colors.text },
-          activeTab === item.id && [
-            styles.activeDropdownItemText,
-            { color: colors.accent },
-          ],
-        ]}>
+        style={[styles.dropdownItemText, { color: colors.text }, activeTab === item.id && [styles.activeDropdownItemText, { color: colors.accent }]]}
+      >
         {item.label}
       </Text>
     </TouchableOpacity>
   );
 
   return (
-    <View style={styles.tabsWrapper} onLayout={onContainerLayout}>
+    <View style={styles.tabsWrapper}>
       <View style={styles.tabs}>
         {visibleTabs.map((tab) => (
           <TouchableOpacity
@@ -110,21 +81,14 @@ const ToggleTabsRN: React.FC<TabsProps> = ({
             style={styles.tabButton}
             onLayout={(e) => onTabLayout(e, tab.id)}
             onPress={() => handleTabChange(tab)}
-            activeOpacity={0.7}>
-            <Text
-              style={[
-                styles.tabText,
-                activeTab === tab.id && styles.activeTabText,
-              ]}>
-              {tab.label}
-            </Text>
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.tabText, activeTab === tab.id && styles.activeTabText]}>{tab.label}</Text>
           </TouchableOpacity>
         ))}
 
         {dropdownTabs.length > 0 && (
-          <TouchableOpacity
-            style={styles.moreButton}
-            onPress={() => setShowDropdown(true)}>
+          <TouchableOpacity style={styles.moreButton} onPress={() => setShowDropdown(true)}>
             <Text style={styles.moreButtonText}>•••</Text>
           </TouchableOpacity>
         )}
@@ -140,26 +104,10 @@ const ToggleTabsRN: React.FC<TabsProps> = ({
         />
       </View>
 
-      <Modal
-        visible={showDropdown}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowDropdown(false)}>
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowDropdown(false)}>
-          <View
-            style={[
-              styles.dropdownContainer,
-              { backgroundColor: colors.darkBackground },
-            ]}>
-            <FlatList
-              data={dropdownTabs}
-              renderItem={renderDropdownItem}
-              keyExtractor={(item) => item.id}
-              style={styles.dropdownList}
-            />
+      <Modal visible={showDropdown} transparent animationType="fade" onRequestClose={() => setShowDropdown(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowDropdown(false)}>
+          <View style={[styles.dropdownContainer, { backgroundColor: colors.darkBackground }]}>
+            <FlatList data={dropdownTabs} renderItem={renderDropdownItem} keyExtractor={(item) => item.id} style={styles.dropdownList} />
           </View>
         </TouchableOpacity>
       </Modal>

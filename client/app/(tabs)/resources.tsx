@@ -21,19 +21,12 @@ export default function ResourcesScreen() {
   const [activeTab, setActiveTab] = useState<string>("1");
   return (
     <ThemedScreen>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.content}>
-        <Header
-          title="Local Legal and Community Help"
-          subtitle="Find real-world support when you need it most."
-        />
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+        <Header title="Local Legal and Community Help" subtitle="Find real-world support when you need it most." />
         <Quotes />
 
         <ThemedCard>
-          <Text style={[styles.locationTitle, { color: colors.text }]}>
-            Your location
-          </Text>
+          <Text style={[styles.locationTitle, { color: colors.text }]}>Your location</Text>
           <View
             style={[
               styles.locationInputContainer,
@@ -41,13 +34,10 @@ export default function ResourcesScreen() {
                 borderColor: colors.border,
                 backgroundColor: colors.darkBackground,
               },
-            ]}>
+            ]}
+          >
             <Ionicons name="location-outline" size={24} color={colors.hint} />
-            <TextInput
-              style={{ color: colors.text }}
-              placeholder="Enter your location"
-              placeholderTextColor={colors.hint}
-            />
+            <TextInput style={{ color: colors.text }} placeholder="Enter your location" placeholderTextColor={colors.hint} />
           </View>
         </ThemedCard>
 

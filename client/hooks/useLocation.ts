@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
-import * as Location from 'expo-location';
-import { Alert } from 'react-native';
+import { useState, useEffect, useCallback, useMemo } from "react";
+import * as Location from "expo-location";
+import { Alert } from "react-native";
 
 interface LocationState {
   location: Location.LocationObject | null;
@@ -9,126 +9,79 @@ interface LocationState {
   loading: boolean;
 }
 
-interface LocationCoords {
-  latitude: number;
-  longitude: number;
-  accuracy: number | null;
-}
+let globalState: LocationState = {
+  location: null,
+  address: null,
+  error: null,
+  loading: false,
+};
+
+let locationPromise: Promise<void> | null = null;
 
 export const useLocation = () => {
-  const [state, setState] = useState<LocationState>({
-    location: null,
-    address: null,
-    error: null,
-    loading: false,
-  });
-  
-  const hasRequestedLocation = useRef(false);
+  const [state, setState] = useState<LocationState>(globalState);
 
-  const getCurrentLocation = async () => {
-    if (hasRequestedLocation.current) return;
-    
-    setState(prev => ({ ...prev, loading: true, error: null }));
-    hasRequestedLocation.current = true;
-
-    try {
-      // Запрашиваем разрешение на доступ к геолокации
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      
-      if (status !== 'granted') {
-        const errorMessage = 'Доступ к геолокации запрещен';
-        setState(prev => ({ 
-          ...prev, 
-          error: errorMessage, 
-          loading: false 
-        }));
-        Alert.alert(
-          'Ошибка',
-          'Для получения актуальных новостей требуется доступ к вашему местоположению'
-        );
-        return;
-      }
-
-      // Получаем текущее местоположение
-      const currentLocation = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-
-      // Получаем адрес по координатам
-      let formattedAddress = null;
-      try {
-        const addressResponse = await Location.reverseGeocodeAsync({
-          latitude: currentLocation.coords.latitude,
-          longitude: currentLocation.coords.longitude,
-        });
-        
-        if (addressResponse.length > 0) {
-          const { city, country, region } = addressResponse[0];
-          formattedAddress = [city, region, country].filter(Boolean).join(', ');
-        }
-      } catch (addressError) {
-        console.warn('Не удалось получить адрес:', addressError);
-      }
-
-      setState({
-        location: currentLocation,
-        address: formattedAddress,
-        error: null,
-        loading: false,
-      });
-
-      console.log('Локация пользователя:', {
-        latitude: currentLocation.coords.latitude,
-        longitude: currentLocation.coords.longitude,
-        accuracy: currentLocation.coords.accuracy,
-        address: formattedAddress,
-      });
-
-    } catch (error) {
-      const errorMessage = 'Ошибка получения геолокации';
-      setState(prev => ({ 
-        ...prev, 
-        error: errorMessage, 
-        loading: false 
-      }));
-      console.error('Ошибка получения локации:', error);
-      Alert.alert('Ошибка', 'Не удалось получить ваше местоположение');
+  const getCurrentLocation = useCallback(async () => {
+    if (locationPromise) {
+      await locationPromise;
+      return;
     }
-  };
 
-  const getCoordinates = (): LocationCoords | null => {
-    if (!state.location) return null;
-    
-    return {
-      latitude: state.location.coords.latitude,
-      longitude: state.location.coords.longitude,
-      accuracy: state.location.coords.accuracy,
-    };
-  };
+    if (globalState.location || globalState.error) {
+      return;
+    }
 
-  const getAddressString = (): string | null => {
-    return state.address;
-  };
+    locationPromise = (async () => {
+      globalState = { ...globalState, loading: true };
+      setState(globalState);
 
-  const resetLocation = () => {
-    hasRequestedLocation.current = false;
-    setState({
-      location: null,
-      address: null,
-      error: null,
-      loading: false,
-    });
-  };
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+
+        if (status !== "granted") {
+          throw new Error("Доступ к геолокации запрещен");
+        }
+
+        const location = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+
+        let address = null;
+        try {
+          const [firstResult] = await Location.reverseGeocodeAsync({
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+          });
+
+          address = [firstResult?.city, firstResult?.region, firstResult?.country].filter(Boolean).join(", ");
+        } catch {}
+
+        globalState = { location, address, error: null, loading: false };
+        setState(globalState);
+      } catch (error) {
+        globalState = {
+          ...globalState,
+          error: error instanceof Error ? error.message : "Ошибка получения геолокации",
+          loading: false,
+        };
+        setState(globalState);
+        Alert.alert("Ошибка", "Не удалось получить ваше местоположение");
+      }
+    })();
+
+    await locationPromise;
+    locationPromise = null;
+  }, []);
 
   useEffect(() => {
     getCurrentLocation();
   }, []);
 
-  return {
-    ...state,
-    getCurrentLocation,
-    getCoordinates,
-    getAddressString,
-    resetLocation,
-  };
-}; 
+  return useMemo(
+    () => ({
+      ...state,
+      getCurrentLocation,
+    }),
+    [state, getCurrentLocation]
+  );
+};

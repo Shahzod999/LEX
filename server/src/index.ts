@@ -9,10 +9,9 @@ import chatRoutes from "./routes/chatRoutes";
 import documentRoutes from "./routes/documentRoutes";
 import uploadImages from "./routes/uploadImages";
 import { ChatWebSocketServer } from "./controllers/websocketController"; //new
-import {
-  websocketHealthCheck,
-  websocketMetrics,
-} from "./middleware/websocketMonitoring";
+import { websocketHealthCheck, websocketMetrics } from "./middleware/websocketMonitoring";
+import reminderRoutes from "./routes/reminderRoutes";
+import openaiRoutes from "./routes/openaiRoutes";
 
 dotenv.config();
 
@@ -20,10 +19,7 @@ const app = express();
 const server = createServer(app); //new
 const port = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
-const allowedOrigins = [
-  "http://localhost:3000",
-  "https://your-production-domain.com",
-];
+const allowedOrigins = ["http://localhost:3000", "https://your-production-domain.com"];
 
 app.use(
   cors({
@@ -52,10 +48,8 @@ app.use("/api/users", usersRoutes);
 app.use("/api/documents", documentRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/upload", uploadImages);
-
-
-
-
+app.use("/api/openai", openaiRoutes);
+app.use("/api/reminder", reminderRoutes);
 
 // WebSocket monitoring endpoints
 app.get("/api/websocket/health", websocketHealthCheck);
