@@ -22,12 +22,7 @@ const NewsList = () => {
   const profile = useAppSelector(selectUser);
   const { location, address, error: locationError, loading: locationLoading } = useLocation();
 
-  const isReadyForNewsQuery = !!(
-    location && 
-    profile?.nationality && 
-    profile?.language && 
-    address
-  );
+  const isReadyForNewsQuery = !!(location && profile?.nationality && profile?.language && address);
 
   const { data, isLoading: newsLoading } = useGetOpenAIQuery(
     {
@@ -42,7 +37,7 @@ const NewsList = () => {
         },
       ],
       max_tokens: 1500,
-      temperature: 0.3,
+      temperature: 0,
     },
     { skip: !isReadyForNewsQuery }
   );
@@ -69,26 +64,19 @@ const NewsList = () => {
       ) : location ? (
         <View style={styles.locationInfo}>
           <Ionicons name="navigate" size={16} color={colors.success} />
-          <Text style={[styles.locationText, { color: colors.success }]}>
-            {address || "Определение адреса..."}
-          </Text>
+          <Text style={[styles.locationText, { color: colors.success }]}>{address || "Определение адреса..."}</Text>
         </View>
       ) : locationError ? (
         <View style={styles.errorInfo}>
           <Text style={styles.errorText}>⚠️ {locationError}</Text>
-          <Text style={styles.errorSubText}>
-            Новости не могут быть персонализированы без доступа к геолокации
-          </Text>
+          <Text style={styles.errorSubText}>Новости не могут быть персонализированы без доступа к геолокации</Text>
         </View>
       ) : null}
 
       {newsLoading && <LoadingText text="Загрузка новостей..." />}
 
       {news.map((item: NewsItem, index: number) => (
-        <News 
-          key={`${item.title}-${index}`} 
-          {...item} 
-        />
+        <News key={`${item.title}-${index}`} {...item} />
       ))}
 
       {!isLoading && news.length === 0 && isReadyForNewsQuery && (

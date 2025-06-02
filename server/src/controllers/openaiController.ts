@@ -21,23 +21,3 @@ export const openaiController = asyncHandler(async (req: Request, res: Response)
     data: response.choices[0].message.content,
   });
 });
-
-// example of messages:
-// [
-//   {
-//     role: "user",
-//     content: "Hello, how are you?"
-//   }
-// ]
-
-// example of request:
-// {
-//   "messages": [
-//     {
-//       "role": "user",
-//       "content": "Hello, how are you?"
-//     }
-//   ],
-//   "max_tokens": 100,
-//   "temperature": 0
-// }

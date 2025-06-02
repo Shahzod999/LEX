@@ -1,18 +1,6 @@
-import {
-  StyleSheet,
-  Text,
-  View,
-  ScrollView,
-  Image,
-  FlatList,
-  Dimensions,
-  TouchableOpacity,
-} from "react-native";
+import { StyleSheet, Text, View, ScrollView, Image, FlatList, Dimensions, TouchableOpacity } from "react-native";
 import React from "react";
-import {
-  useGetUserCurrentDocumentQuery,
-  useUpdateDocumentMutation,
-} from "@/redux/api/endpoints/documentApiSlice";
+import { useGetUserCurrentDocumentQuery, useUpdateDocumentMutation } from "@/redux/api/endpoints/documentApiSlice";
 import { useLocalSearchParams, Stack, router } from "expo-router";
 import ThemedScreen from "@/components/ThemedScreen";
 import LoadingScreen, { Loading } from "@/components/common/LoadingScreen";
@@ -36,17 +24,12 @@ const CurrentDocumentScreen = () => {
   const { id } = useLocalSearchParams();
   const idString = id as string;
   const { showSuccess, showError } = useToast();
-  const {
-    data: document,
-    isLoading,
-    error,
-  } = useGetUserCurrentDocumentQuery(idString);
-  const [updateDocument, { isLoading: isUpdating }] =
-    useUpdateDocumentMutation();
+  const { data: document, isLoading, error } = useGetUserCurrentDocumentQuery(idString);
+  const [updateDocument, { isLoading: isUpdating }] = useUpdateDocumentMutation();
   const { visible, fileData, openFile, closeFile } = useFileReader();
 
   const handleSwipeGesture = (event: any) => {
-    if (event.nativeEvent.translationX > 150) {
+    if (event.nativeEvent.translationX > 100) {
       router.push("/(tabs)/activity");
     }
   };
@@ -63,7 +46,7 @@ const CurrentDocumentScreen = () => {
   const handleImagePress = (imageUrl: string, index: number) => {
     openFile({
       uri: `${process.env.EXPO_PUBLIC_URL}/upload/${imageUrl}`,
-      fileName: `${document?.title || 'Document'} - Image ${index + 1}`,
+      fileName: `${document?.title || "Document"} - Image ${index + 1}`,
       headers: {
         Authorization: `Bearer ${token}`,
       },
@@ -84,9 +67,7 @@ const CurrentDocumentScreen = () => {
           }}
         />
         <View style={styles.errorContainer}>
-          <Text style={[styles.errorText, { color: colors.text }]}>
-            Document not found or error loading document
-          </Text>
+          <Text style={[styles.errorText, { color: colors.text }]}>Document not found or error loading document</Text>
         </View>
       </ThemedScreen>
     );
@@ -96,24 +77,14 @@ const CurrentDocumentScreen = () => {
     <ThemedScreen>
       {isUpdating && <Loading />}
       <PanGestureHandler onHandlerStateChange={handleSwipeGesture}>
-        <ScrollView
-          style={styles.container}
-          showsVerticalScrollIndicator={false}>
+        <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
           {/* Document Header */}
           <View style={[styles.header, { borderBottomColor: colors.border }]}>
             <View style={styles.headerRow}>
-              <Ionicons
-                name="document-text-outline"
-                size={32}
-                color={colors.accent}
-              />
+              <Ionicons name="document-text-outline" size={32} color={colors.accent} />
               <View style={styles.headerInfo}>
-                <Text style={[styles.title, { color: colors.text }]}>
-                  {document.title}
-                </Text>
-                <Text style={[styles.uploadDate, { color: colors.hint }]}>
-                  Uploaded: {formatDate(document.createdAt)}
-                </Text>
+                <Text style={[styles.title, { color: colors.text }]}>{document.title}</Text>
+                <Text style={[styles.uploadDate, { color: colors.hint }]}>Uploaded: {formatDate(document.createdAt)}</Text>
               </View>
             </View>
             <View style={styles.statusContainer}>
@@ -121,9 +92,7 @@ const CurrentDocumentScreen = () => {
                 <StatusBox
                   key={status}
                   status={status}
-                  color={
-                    status == document.info.status ? colors.accent : colors.hint
-                  }
+                  color={status == document.info.status ? colors.accent : colors.hint}
                   onPress={() => {
                     handleUpdateDocument({ status: status });
                   }}
@@ -134,9 +103,7 @@ const CurrentDocumentScreen = () => {
 
           {/* Document Gallery */}
           <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              Document Images
-            </Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Document Images</Text>
             {document.filesUrl && document.filesUrl.length > 0 ? (
               <FlatList
                 data={document.filesUrl}
@@ -145,11 +112,7 @@ const CurrentDocumentScreen = () => {
                 contentContainerStyle={styles.galleryContainer}
                 keyExtractor={(_item, index) => `image-${index}`}
                 renderItem={({ item, index }) => (
-                  <TouchableOpacity
-                    style={styles.galleryImageContainer}
-                    onPress={() => handleImagePress(item, index)}
-                    activeOpacity={0.8}
-                  >
+                  <TouchableOpacity style={styles.galleryImageContainer} onPress={() => handleImagePress(item, index)} activeOpacity={0.8}>
                     <Image
                       source={{
                         uri: `${process.env.EXPO_PUBLIC_URL}/upload/${item}`,
@@ -157,10 +120,7 @@ const CurrentDocumentScreen = () => {
                           Authorization: `Bearer ${token}`,
                         },
                       }}
-                      style={[
-                        styles.galleryImage,
-                        { borderColor: colors.border },
-                      ]}
+                      style={[styles.galleryImage, { borderColor: colors.border }]}
                       resizeMode="cover"
                     />
                     <Text style={[styles.imageCounter, { color: colors.hint }]}>
@@ -170,75 +130,43 @@ const CurrentDocumentScreen = () => {
                 )}
               />
             ) : (
-              <View
-                style={[
-                  styles.noImageContainer,
-                  { borderColor: colors.border },
-                ]}>
+              <View style={[styles.noImageContainer, { borderColor: colors.border }]}>
                 <Ionicons name="image-outline" size={48} color={colors.hint} />
-                <Text style={[styles.noImageText, { color: colors.hint }]}>
-                  No images available
-                </Text>
+                <Text style={[styles.noImageText, { color: colors.hint }]}>No images available</Text>
               </View>
             )}
           </View>
 
           {/* Document Information */}
           <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              Document Information
-            </Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Document Information</Text>
 
             {document.info.description && (
               <View style={styles.infoRow}>
-                <Ionicons
-                  name="information-circle-outline"
-                  size={20}
-                  color={colors.hint}
-                />
+                <Ionicons name="information-circle-outline" size={20} color={colors.hint} />
                 <View style={styles.infoContent}>
-                  <Text style={[styles.infoLabel, { color: colors.hint }]}>
-                    Description
-                  </Text>
-                  <Text style={[styles.infoText, { color: colors.text }]}>
-                    {document.info.description}
-                  </Text>
+                  <Text style={[styles.infoLabel, { color: colors.hint }]}>Description</Text>
+                  <Text style={[styles.infoText, { color: colors.text }]}>{document.info.description}</Text>
                 </View>
               </View>
             )}
 
             {document.info.deadline && (
               <View style={styles.infoRow}>
-                <Ionicons
-                  name="calendar-outline"
-                  size={20}
-                  color={colors.hint}
-                />
+                <Ionicons name="calendar-outline" size={20} color={colors.hint} />
                 <View style={styles.infoContent}>
-                  <Text style={[styles.infoLabel, { color: colors.hint }]}>
-                    Deadline
-                  </Text>
-                  <Text style={[styles.infoText, { color: colors.text }]}>
-                    {formatDayMonthYear(document.info.deadline)}
-                  </Text>
+                  <Text style={[styles.infoLabel, { color: colors.hint }]}>Deadline</Text>
+                  <Text style={[styles.infoText, { color: colors.text }]}>{formatDayMonthYear(document.info.deadline)}</Text>
                 </View>
               </View>
             )}
 
             {document.info.expirationDate && (
               <View style={styles.infoRow}>
-                <Ionicons
-                  name="warning-outline"
-                  size={20}
-                  color={colors.hint}
-                />
+                <Ionicons name="warning-outline" size={20} color={colors.hint} />
                 <View style={styles.infoContent}>
-                  <Text style={[styles.infoLabel, { color: colors.hint }]}>
-                    Expiration Date
-                  </Text>
-                  <Text style={[styles.infoText, { color: colors.text }]}>
-                    {formatDayMonthYear(document.info.expirationDate)}
-                  </Text>
+                  <Text style={[styles.infoLabel, { color: colors.hint }]}>Expiration Date</Text>
+                  <Text style={[styles.infoText, { color: colors.text }]}>{formatDayMonthYear(document.info.expirationDate)}</Text>
                 </View>
               </View>
             )}
@@ -246,67 +174,43 @@ const CurrentDocumentScreen = () => {
             <View style={styles.infoRow}>
               <Ionicons name="time-outline" size={20} color={colors.hint} />
               <View style={styles.infoContent}>
-                <Text style={[styles.infoLabel, { color: colors.hint }]}>
-                  Last Updated
-                </Text>
-                <Text style={[styles.infoText, { color: colors.text }]}>
-                  {formatDate(document.updatedAt)}
-                </Text>
+                <Text style={[styles.infoLabel, { color: colors.hint }]}>Last Updated</Text>
+                <Text style={[styles.infoText, { color: colors.text }]}>{formatDate(document.updatedAt)}</Text>
               </View>
             </View>
           </View>
 
           {/* Document Messages/Chat */}
-          {document.chatId &&
-            document.chatId.messages &&
-            document.chatId.messages.length > 0 && (
-              <View style={styles.section}>
-                <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                  Document Analysis
-                </Text>
-                <View
-                  style={[
-                    styles.chatContainer,
-                    {
-                      backgroundColor: colors.card,
-                      borderColor: colors.border,
-                    },
-                  ]}>
-                  {document.chatId.messages.map(
-                    (message: any, index: number) => (
-                      <View key={index} style={styles.messageContainer}>
-                        <Text
-                          style={[
-                            styles.messageRole,
-                            { color: colors.accent },
-                          ]}>
-                          {message.role === "assistant"
-                            ? "AI Analysis:"
-                            : "User:"}
-                        </Text>
-                        <Text
-                          style={[styles.messageText, { color: colors.text }]}>
-                          {message.content}
-                        </Text>
-                      </View>
-                    )
-                  )}
-                </View>
+          {document.chatId && document.chatId.messages && document.chatId.messages.length > 0 && (
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Document Analysis</Text>
+              <View
+                style={[
+                  styles.chatContainer,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                {document.chatId.messages.map((message: any, index: number) => (
+                  <View key={index} style={styles.messageContainer}>
+                    <Text style={[styles.messageRole, { color: colors.accent }]}>{message.role === "assistant" ? "AI Analysis:" : "User:"}</Text>
+                    <Text style={[styles.messageText, { color: colors.text }]}>{message.content}</Text>
+                  </View>
+                ))}
               </View>
-            )}
+            </View>
+          )}
+          <View style={styles.swipeContainer}>
+            <Ionicons name="arrow-forward" size={22} color={colors.accent} />
+            <Text style={[styles.swipeText, { color: colors.hint }]}>swipe to go back</Text>
+          </View>
         </ScrollView>
       </PanGestureHandler>
-      
+
       {/* File Reader Modal */}
-      {fileData && (
-        <FileReader
-          uri={fileData.uri}
-          fileName={fileData.fileName}
-          headers={fileData.headers}
-          visible={visible}
-          onClose={closeFile}
-        />
-      )}
+      {fileData && <FileReader uri={fileData.uri} fileName={fileData.fileName} headers={fileData.headers} visible={visible} onClose={closeFile} />}
     </ThemedScreen>
   );
 };
@@ -447,5 +351,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: "center",
     marginTop: 10,
+  },
+
+  swipeContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    marginBottom: 100,
+  },
+  swipeText: {
+    fontSize: 14,
+    textAlign: "center",
   },
 });

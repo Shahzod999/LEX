@@ -22,8 +22,8 @@ export default function ActivityScreen() {
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}>
         <Header
-          title="Document Scanner"
-          subtitle="Scan and analyze legal documents instantly"
+          title="Your Activity"
+          subtitle="Your files, news and reminders"
         />
         <View style={styles.tabsContainer}>
           <ToggleTabsRN tabs={tabs} onTabChange={setActiveTab} />

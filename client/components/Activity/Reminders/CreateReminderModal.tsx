@@ -7,6 +7,7 @@ import ThemedButton from "@/components/ThemedButton";
 import { Ionicons } from "@expo/vector-icons";
 import { useCreateReminderMutation } from "@/redux/api/endpoints/reminderApi";
 import { useToast } from "@/context/ToastContext";
+import { formatDayMonthYear } from "@/utils/formatDate";
 
 interface CreateReminderModalProps {
   visible: boolean;
@@ -143,20 +144,6 @@ const CreateReminderModal: React.FC<CreateReminderModalProps> = ({ visible, onCl
         </View>
 
         <View style={styles.formGroup}>
-          <Text style={[styles.label, { color: colors.text }]}>Дата выполнения</Text>
-          <TouchableOpacity
-            style={[styles.input, styles.dateButton, { backgroundColor: colors.card }]}
-            onPress={() => {
-              setTempDeadline(formData.deadline);
-              setShowDeadlinePicker(true);
-            }}
-          >
-            <Ionicons name="calendar-outline" size={20} color={colors.hint} />
-            <Text style={{ color: colors.text, marginLeft: 10 }}>{formData.deadline.toLocaleDateString("ru-RU")}</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.formGroup}>
           <Text style={[styles.label, { color: colors.text }]}>Запланировано на</Text>
           <TouchableOpacity
             style={[styles.input, styles.dateButton, { backgroundColor: colors.card }]}
@@ -165,26 +152,25 @@ const CreateReminderModal: React.FC<CreateReminderModalProps> = ({ visible, onCl
               setShowSchedulePicker(true);
             }}
           >
-            <Ionicons name="time-outline" size={20} color={colors.hint} />
-            <Text style={{ color: colors.text, marginLeft: 10 }}>
-              {formData.schedule.toLocaleDateString("ru-RU")} в{" "}
-              {formData.schedule.toLocaleTimeString("ru-RU", {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </Text>
+            <Ionicons name="calendar-number" size={20} color={colors.hint} />
+            <Text style={{ color: colors.text, marginLeft: 10 }}>{formatDayMonthYear(formData.schedule)}</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.formGroup}>
+          <Text style={[styles.label, { color: colors.text }]}>Последний срок</Text>
+          <TouchableOpacity
+            style={[styles.input, styles.dateButton, { backgroundColor: colors.card }]}
+            onPress={() => {
+              setTempDeadline(formData.deadline);
+              setShowDeadlinePicker(true);
+            }}
+          >
+            <Ionicons name="calendar-outline" size={20} color={colors.hint} />
+            <Text style={{ color: colors.text, marginLeft: 10 }}>{formatDayMonthYear(formData.deadline)}</Text>
           </TouchableOpacity>
         </View>
       </View>
-      {/* Deadline Date Picker */}
-      {Platform.OS === "ios" ? (
-        <BottomModal visible={showDeadlinePicker} onClose={() => setShowDeadlinePicker(false)} onConfirm={confirmDeadline} title="Выберите дату">
-          <DateTimePicker value={tempDeadline} mode="date" display="spinner" onChange={handleDeadlineChange} style={styles.datePicker} />
-        </BottomModal>
-      ) : (
-        showDeadlinePicker && <DateTimePicker value={formData.deadline} mode="date" display="default" onChange={handleDeadlineChange} />
-      )}
-
       {/* Schedule Date Picker */}
       {Platform.OS === "ios" ? (
         <BottomModal
@@ -193,10 +179,19 @@ const CreateReminderModal: React.FC<CreateReminderModalProps> = ({ visible, onCl
           onConfirm={confirmSchedule}
           title="Выберите дату и время"
         >
-          <DateTimePicker value={tempSchedule} mode="datetime" display="spinner" onChange={handleScheduleChange} style={styles.datePicker} />
+          <DateTimePicker value={tempSchedule} mode="date" display="spinner" onChange={handleScheduleChange} style={styles.datePicker} />
         </BottomModal>
       ) : (
-        showSchedulePicker && <DateTimePicker value={formData.schedule} mode="datetime" display="default" onChange={handleScheduleChange} />
+        showSchedulePicker && <DateTimePicker value={formData.schedule} mode="date" display="default" onChange={handleScheduleChange} />
+      )}
+
+      {/* Deadline Date Picker */}
+      {Platform.OS === "ios" ? (
+        <BottomModal visible={showDeadlinePicker} onClose={() => setShowDeadlinePicker(false)} onConfirm={confirmDeadline} title="Выберите дату">
+          <DateTimePicker value={tempDeadline} mode="date" display="spinner" onChange={handleDeadlineChange} style={styles.datePicker} />
+        </BottomModal>
+      ) : (
+        showDeadlinePicker && <DateTimePicker value={formData.deadline} mode="date" display="default" onChange={handleDeadlineChange} />
       )}
     </BottomModal>
   );

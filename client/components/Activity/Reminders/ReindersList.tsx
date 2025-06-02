@@ -30,10 +30,9 @@ const ReindersList = () => {
 
       {isLoading && <Loading />}
 
-      {reminders?.map((reminder, index) => (
-        <SwipeDelete handleDelete={() => handleDeleteReminder(reminder._id)}>
+      {reminders?.map((reminder) => (
+        <SwipeDelete key={reminder._id} handleDelete={() => handleDeleteReminder(reminder._id)}>
           <Reminders
-            key={reminder._id}
             title={reminder.title}
             description={reminder.description}
             time={reminder.createdAt}

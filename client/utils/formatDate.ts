@@ -11,10 +11,7 @@ export const formatDate = (date: string, locale: string = globalLocale) => {
   });
 };
 
-export const formatDayMonthYear = (
-  date: string,
-  locale: string = globalLocale
-) => {
+export const formatDayMonthYear = (date: string | Date, locale: string = globalLocale) => {
   const dateObj = new Date(date);
   return dateObj.toLocaleString(locale, {
     year: "numeric",
