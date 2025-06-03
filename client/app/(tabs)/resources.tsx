@@ -6,8 +6,9 @@ import ThemedButton from "@/components/ThemedButton";
 import { useTheme } from "@/context/ThemeContext";
 import { Ionicons } from "@expo/vector-icons";
 import ToggleTabsRN from "@/components/ToggleTabs/ToggleTabsRN";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useLocation } from "@/hooks/useLocation";
+import { useDebounce } from "@/hooks/useDebounce";
 import { useGetOpenAIQuery } from "@/redux/api/endpoints/openAI";
 import { useAppSelector } from "@/hooks/reduxHooks";
 import { selectUser } from "@/redux/features/userSlice";
@@ -15,7 +16,7 @@ import ResourceCard from "@/components/Resource/ResourceCard";
 import ResourceLoadingCard from "@/components/Resource/ResourceLoadingCard";
 import { Resource } from "@/types/resource";
 
-const tabs = [
+const RESOURCE_TABS = [
   { id: "1", label: "All Resources", type: "all" },
   { id: "2", label: "Legal Aid", type: "legal" },
   { id: "3", label: "Immigration", type: "immigration" },
@@ -23,37 +24,27 @@ const tabs = [
   { id: "5", label: "Hotlines", type: "hotlines" },
 ];
 
+const LOADING_PLACEHOLDERS_COUNT = 3;
+
 export default function ResourcesScreen() {
   const { colors } = useTheme();
   const [activeTab, setActiveTab] = useState<string>("1");
   const [customLocation, setCustomLocation] = useState<string>("");
-  const [searchLocation, setSearchLocation] = useState<string>("");
-  const [isSearching, setIsSearching] = useState<boolean>(false);
+
   const { location, address } = useLocation();
   const profile = useAppSelector(selectUser);
 
-  const currentLocation = searchLocation || customLocation || address || (location ? "Current location" : "");
-  const activeTabType = tabs.find((tab) => tab.id === activeTab)?.type || "all";
+  // Debounce the custom location input with 800ms delay
+  const debouncedCustomLocation = useDebounce(customLocation, 800);
 
-  const isReadyForResourcesQuery = !!(currentLocation && profile?.nationality && profile?.language);
+  // Use debounced location or fallback to device location
+  const currentLocation = debouncedCustomLocation || address || "";
+  const activeTabType = RESOURCE_TABS.find((tab) => tab.id === activeTab)?.type || "all";
+  const isReadyForResourcesQuery = Boolean(currentLocation && profile?.nationality && profile?.language);
 
-  // Show search button when user has entered custom location and it's different from search location
-  const showSearchButton = customLocation.trim() !== "" && customLocation !== searchLocation;
-
-  const handleSearch = () => {
-    setIsSearching(true);
-    setSearchLocation(customLocation);
-    // Reset searching state after a short delay to show feedback
-    setTimeout(() => setIsSearching(false), 1000);
-  };
-
-  const handleLocationChange = (text: string) => {
+  const handleLocationChange = useCallback((text: string) => {
     setCustomLocation(text);
-    // If user clears the input, reset search location to use auto-detected location
-    if (text.trim() === "") {
-      setSearchLocation("");
-    }
-  };
+  }, []);
 
   const {
     data: resourcesData,
@@ -69,15 +60,13 @@ export default function ResourcesScreen() {
         },
         {
           role: "user",
-          content: `Find me ${activeTabType === "all" ? "various types of" : activeTabType} resources and services for immigrants from ${
-            profile?.nationality
-          } living in ${currentLocation}. 
+          content: `Find me various types of resources and services for immigrants from ${profile?.nationality} living in ${currentLocation}. 
 
           Please provide real organizations with accurate contact information including:
-          - Legal aid organizations (if ${activeTabType === "all" || activeTabType === "legal"})
-          - Immigration services (if ${activeTabType === "all" || activeTabType === "immigration"})
-          - Housing assistance (if ${activeTabType === "all" || activeTabType === "housing"})
-          - Hotlines and emergency services (if ${activeTabType === "all" || activeTabType === "hotlines"})
+          - Legal aid organizations
+          - Immigration services  
+          - Housing assistance
+          - Hotlines and emergency services
 
           Focus on organizations that serve ${profile?.nationality} immigrants and provide services in ${profile?.language}. 
 
@@ -87,7 +76,7 @@ export default function ResourcesScreen() {
               "id": "unique_id",
               "title": "Organization Name", 
               "description": "Brief description of services",
-              "type": "${activeTabType === "all" ? "legal|immigration|housing|hotlines" : activeTabType}",
+              "type": "legal|immigration|housing|hotlines",
               "contactInfo": {
                 "phone": "+1-xxx-xxx-xxxx",
                 "email": "contact@org.com",
@@ -103,7 +92,7 @@ export default function ResourcesScreen() {
             }
           ]
 
-          Provide 5-8 real, relevant resources with accurate contact information.`,
+          Provide 8-12 real, relevant resources covering all types of services with accurate contact information.`,
         },
       ],
       max_tokens: 2000,
@@ -118,11 +107,7 @@ export default function ResourcesScreen() {
     try {
       const content = resourcesData.data;
       const jsonMatch = content.match(/\[[\s\S]*\]/);
-      if (jsonMatch) {
-        const parsedData = JSON.parse(jsonMatch[0]);
-        return Array.isArray(parsedData) ? parsedData : [];
-      }
-      return [];
+      return jsonMatch ? JSON.parse(jsonMatch[0]) : [];
     } catch (error) {
       console.error("Resources parsing error:", error);
       return [];
@@ -130,9 +115,73 @@ export default function ResourcesScreen() {
   }, [resourcesData?.data]);
 
   const filteredResources = useMemo(() => {
-    if (activeTabType === "all") return resources;
-    return resources.filter((resource: Resource) => resource.type === activeTabType);
+    return activeTabType === "all" ? resources : resources.filter((resource: Resource) => resource.type === activeTabType);
   }, [resources, activeTabType]);
+
+  const renderContent = () => {
+    if (!isReadyForResourcesQuery) {
+      return (
+        <ThemedCard>
+          <View style={styles.noDataContainer}>
+            <Ionicons name="information-circle-outline" size={32} color={colors.hint} />
+            <Text style={[styles.noDataText, { color: colors.text }]}>Please complete your profile to see personalized resources</Text>
+            <Text style={[styles.noDataSubtext, { color: colors.hint }]}>
+              We need your location, nationality, and language preferences to find the best resources for you.
+            </Text>
+          </View>
+        </ThemedCard>
+      );
+    }
+
+    if (isLoading || isFetching) {
+      return (
+        <View style={styles.resourcesContainer}>
+          <Text style={[styles.resourcesHeader, { color: colors.text }]}>
+            Finding resources for {profile?.nationality} immigrants in {currentLocation}...
+          </Text>
+          {Array(LOADING_PLACEHOLDERS_COUNT)
+            .fill(0)
+            .map((_, index) => (
+              <ResourceLoadingCard key={`loading-${index}`} />
+            ))}
+        </View>
+      );
+    }
+
+    if (error) {
+      return (
+        <ThemedCard>
+          <View style={styles.errorContainer}>
+            <Ionicons name="warning-outline" size={32} color="#EF4444" />
+            <Text style={[styles.errorText, { color: colors.text }]}>Unable to load resources. Please check your connection and try again.</Text>
+          </View>
+        </ThemedCard>
+      );
+    }
+
+    if (filteredResources.length === 0) {
+      return (
+        <ThemedCard>
+          <View style={styles.noDataContainer}>
+            <Ionicons name="search-outline" size={32} color={colors.hint} />
+            <Text style={[styles.noDataText, { color: colors.text }]}>No resources found</Text>
+            <Text style={[styles.noDataSubtext, { color: colors.hint }]}>Try adjusting your location or browse different categories.</Text>
+          </View>
+        </ThemedCard>
+      );
+    }
+
+    return (
+      <View style={styles.resourcesContainer}>
+        <Text style={[styles.resourcesHeader, { color: colors.text }]}>
+          {filteredResources.length} {activeTabType === "all" ? "resources" : `${activeTabType} resources`} found
+        </Text>
+        {filteredResources.map((resource: Resource) => (
+          <ResourceCard key={resource.id} resource={resource} />
+        ))}
+      </View>
+    );
+  };
 
   return (
     <ThemedScreen>
@@ -152,98 +201,28 @@ export default function ResourcesScreen() {
           >
             <Ionicons name="location-outline" size={24} color={colors.hint} />
             <TextInput
-              style={{ color: colors.text, flex: 1 }}
-              placeholder={currentLocation || "Enter your location"}
+              style={[styles.input, { color: colors.text }]}
+              placeholder={address || "Enter your location"}
               placeholderTextColor={colors.hint}
               value={customLocation}
               onChangeText={handleLocationChange}
             />
+            {isFetching && <Ionicons name="hourglass-outline" size={20} color={colors.hint} style={styles.searchingIcon} />}
           </View>
 
-          {/* Current search location indicator */}
-          {(searchLocation || address) && (
+          {currentLocation && (
             <View style={styles.currentLocationContainer}>
               <Ionicons name="navigate-outline" size={16} color={colors.success} />
-              <Text style={[styles.currentLocationText, { color: colors.success }]}>Searching in: {searchLocation || address}</Text>
+              <Text style={[styles.currentLocationText, { color: colors.success }]}>Searching in: {currentLocation}</Text>
             </View>
           )}
         </ThemedCard>
 
-        {showSearchButton && (
-          <View style={styles.searchButtonContainer}>
-            <ThemedButton
-              title={isSearching ? "Searching..." : `Search in "${customLocation}"`}
-              onPress={handleSearch}
-              icon={isSearching ? undefined : "search-outline"}
-              variant="primary"
-              style={styles.searchButton}
-              loading={isSearching}
-              disabled={isSearching}
-            />
-          </View>
-        )}
-
         <View style={styles.tabsContainer}>
-          <ToggleTabsRN tabs={tabs} onTabChange={setActiveTab} />
+          <ToggleTabsRN tabs={RESOURCE_TABS} onTabChange={setActiveTab} />
         </View>
 
-        {/* Loading State */}
-        {(isLoading || isFetching) && (
-          <View style={styles.resourcesContainer}>
-            <Text style={[styles.resourcesHeader, { color: colors.text }]}>
-              Finding resources for {profile?.nationality} immigrants in {searchLocation || address || "your area"}...
-            </Text>
-            {[1, 2, 3].map((index) => (
-              <ResourceLoadingCard key={index} />
-            ))}
-          </View>
-        )}
-
-        {/* Error State */}
-        {error && (
-          <ThemedCard>
-            <View style={styles.errorContainer}>
-              <Ionicons name="warning-outline" size={32} color="#EF4444" />
-              <Text style={[styles.errorText, { color: colors.text }]}>Unable to load resources. Please check your connection and try again.</Text>
-            </View>
-          </ThemedCard>
-        )}
-
-        {/* No Data State */}
-        {!isLoading && !error && !isReadyForResourcesQuery && (
-          <ThemedCard>
-            <View style={styles.noDataContainer}>
-              <Ionicons name="information-circle-outline" size={32} color={colors.hint} />
-              <Text style={[styles.noDataText, { color: colors.text }]}>Please complete your profile to see personalized resources</Text>
-              <Text style={[styles.noDataSubtext, { color: colors.hint }]}>
-                We need your location, nationality, and language preferences to find the best resources for you.
-              </Text>
-            </View>
-          </ThemedCard>
-        )}
-
-        {/* Resources List */}
-        {!isLoading && !error && filteredResources.length > 0 && (
-          <View style={styles.resourcesContainer}>
-            <Text style={[styles.resourcesHeader, { color: colors.text }]}>
-              {filteredResources.length} {activeTabType === "all" ? "resources" : `${activeTabType} resources`} found
-            </Text>
-            {filteredResources.map((resource: Resource) => (
-              <ResourceCard key={resource.id} resource={resource} />
-            ))}
-          </View>
-        )}
-
-        {/* No Resources Found */}
-        {!isLoading && !error && isReadyForResourcesQuery && filteredResources.length === 0 && (
-          <ThemedCard>
-            <View style={styles.noDataContainer}>
-              <Ionicons name="search-outline" size={32} color={colors.hint} />
-              <Text style={[styles.noDataText, { color: colors.text }]}>No resources found</Text>
-              <Text style={[styles.noDataSubtext, { color: colors.hint }]}>Try adjusting your location or browse different categories.</Text>
-            </View>
-          </ThemedCard>
-        )}
+        {renderContent()}
       </ScrollView>
     </ThemedScreen>
   );
@@ -266,17 +245,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 12,
   },
+  input: {
+    flex: 1,
+  },
+  searchingIcon: {
+    marginLeft: 8,
+  },
   tabsContainer: {
     marginVertical: 16,
-  },
-  loadingContainer: {
-    alignItems: "center",
-    paddingVertical: 24,
-    gap: 16,
-  },
-  loadingText: {
-    fontSize: 14,
-    textAlign: "center",
   },
   errorContainer: {
     alignItems: "center",
@@ -312,12 +288,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     textAlign: "center",
   },
-  searchButtonContainer: {
-    marginVertical: 8,
-  },
-  searchButton: {
-    marginHorizontal: 0,
-  },
   currentLocationContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -329,10 +299,6 @@ const styles = StyleSheet.create({
   },
   currentLocationText: {
     fontSize: 13,
-    fontWeight: "500",
-  },
-  searchButtonText: {
-    fontSize: 14,
     fontWeight: "500",
   },
 });
