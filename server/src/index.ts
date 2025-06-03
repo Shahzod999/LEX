@@ -9,7 +9,6 @@ import chatRoutes from "./routes/chatRoutes";
 import documentRoutes from "./routes/documentRoutes";
 import uploadImages from "./routes/uploadImages";
 import { ChatWebSocketServer } from "./controllers/websocketController"; //new
-import { websocketHealthCheck, websocketMetrics } from "./middleware/websocketMonitoring";
 import reminderRoutes from "./routes/reminderRoutes";
 import openaiRoutes from "./routes/openaiRoutes";
 
@@ -51,9 +50,7 @@ app.use("/api/upload", uploadImages);
 app.use("/api/openai", openaiRoutes);
 app.use("/api/reminder", reminderRoutes);
 
-// WebSocket monitoring endpoints
-app.get("/api/websocket/health", websocketHealthCheck);
-app.get("/api/websocket/metrics", websocketMetrics);
+// WebSocket stats endpoint
 app.get("/api/websocket/stats", (_req, res) => {
   try {
     const stats = chatWS.getStats();
@@ -67,8 +64,6 @@ app.get("/api/websocket/stats", (_req, res) => {
 server.listen(port, () => {
   console.log(`Server running on port ${port}`);
   console.log(`WebSocket server available at ws://localhost:${port}/ws/chat`);
-  console.log(`Health check: http://localhost:${port}/api/websocket/health`);
-  console.log(`Metrics: http://localhost:${port}/api/websocket/metrics`);
 });
 
 export default app;

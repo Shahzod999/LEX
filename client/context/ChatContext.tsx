@@ -1,17 +1,5 @@
-import React, {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  useCallback,
-  useRef,
-  ReactNode,
-} from "react";
-import {
-  getChatService,
-  initializeChatService,
-  disconnectChatService,
-} from "../services/websocketService";
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef, ReactNode } from "react";
+import { getChatService, initializeChatService, disconnectChatService } from "../services/websocketService";
 
 interface ChatMessage {
   messageId?: string;
@@ -26,17 +14,17 @@ interface ChatState {
   isTyping: boolean;
   streamingMessage: string;
   lastActivity: Date;
+  isSubscribed: boolean;
 }
 
 interface ChatContextType {
   isConnected: boolean;
   isConnecting: boolean;
   chats: Map<string, ChatState>;
-  activeChatId: string | null;
-  sendMessage: (message: string, chatId?: string) => void;
-  joinChat: (chatId: string) => void;
-  switchChat: (chatId: string) => void;
-  setActiveChat: (chatId: string) => void;
+  subscribedChats: Set<string>;
+  subscribeToChat: (chatId: string) => void;
+  unsubscribeFromChat: (chatId: string) => void;
+  sendMessage: (message: string, chatId: string) => void;
   getChatState: (chatId: string) => ChatState | undefined;
   connect: () => Promise<void>;
   disconnect: () => void;
@@ -50,23 +38,15 @@ interface ChatProviderProps {
   onError?: (error: string) => void;
 }
 
-export const ChatProvider: React.FC<ChatProviderProps> = ({
-  children,
-  token,
-  onError,
-}) => {
+export const ChatProvider: React.FC<ChatProviderProps> = ({ children, token, onError }) => {
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [chats, setChats] = useState<Map<string, ChatState>>(new Map());
-  const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [subscribedChats, setSubscribedChats] = useState<Set<string>>(new Set());
 
   const chatServiceRef = useRef(getChatService());
-  const messageHandlersRef = useRef<Map<string, (data: any) => void>>(
-    new Map()
-  );
-  const isInitializedRef = useRef(false);
+  const pendingSubscriptionsRef = useRef<Set<string>>(new Set());
 
-  // Initialize WebSocket connection
   const connect = useCallback(async () => {
     if (isConnecting || isConnected || !token) return;
 
@@ -76,11 +56,8 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
       const service = initializeChatService(token);
       chatServiceRef.current = service;
 
-      // Clear any existing handlers to prevent duplicates
       service.clearAllHandlers();
-      messageHandlersRef.current.clear();
 
-      // Set up message handlers
       const handlers = {
         connected: () => {
           setIsConnected(true);
@@ -91,20 +68,19 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
           console.log("Authenticated as user:", data.userId);
         },
 
-        chat_joined: (data: any) => {
-          console.log(`Joined chat:`, data.chatId);
+        chat_subscribed: (data: any) => {
           const chatState: ChatState = {
             chatId: data.chatId,
-            messages:
-              data.messages?.map((msg: any) => ({
-                messageId: msg._id,
-                content: msg.content,
-                role: msg.role,
-                timestamp: new Date(msg.createdAt),
-              })) || [],
+            messages: data.messages?.map((msg: any) => ({
+              messageId: msg._id,
+              content: msg.content,
+              role: msg.role,
+              timestamp: new Date(msg.createdAt),
+            })) || [],
             isTyping: false,
             streamingMessage: "",
             lastActivity: new Date(),
+            isSubscribed: true,
           };
 
           setChats((prev) => {
@@ -113,35 +89,48 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
             return updated;
           });
 
-          // Set as active chat if none is set
-          if (!activeChatId) {
-            setActiveChatId(data.chatId);
-          }
+          setSubscribedChats((prev) => new Set(prev).add(data.chatId));
+          pendingSubscriptionsRef.current.delete(data.chatId);
         },
 
-        chat_switched: (data: any) => {
-          console.log(`Switched to chat:`, data.chatId);
-          const chatState: ChatState = {
-            chatId: data.chatId,
-            messages:
-              data.messages?.map((msg: any) => ({
-                messageId: msg._id,
-                content: msg.content,
-                role: msg.role,
-                timestamp: new Date(msg.createdAt),
-              })) || [],
-            isTyping: false,
-            streamingMessage: "",
-            lastActivity: new Date(),
-          };
-
+        chat_unsubscribed: (data: any) => {
           setChats((prev) => {
             const updated = new Map(prev);
-            updated.set(data.chatId, chatState);
+            const chatState = updated.get(data.chatId);
+            if (chatState) {
+              updated.set(data.chatId, { ...chatState, isSubscribed: false });
+            }
             return updated;
           });
 
-          setActiveChatId(data.chatId);
+          setSubscribedChats((prev) => {
+            const updated = new Set(prev);
+            updated.delete(data.chatId);
+            return updated;
+          });
+          pendingSubscriptionsRef.current.delete(data.chatId);
+        },
+
+        chat_history: (data: any) => {
+          const messages = data.messages?.map((msg: any) => ({
+            messageId: msg._id,
+            content: msg.content,
+            role: msg.role,
+            timestamp: new Date(msg.createdAt),
+          })) || [];
+
+          setChats((prev) => {
+            const updated = new Map(prev);
+            const chatState = updated.get(data.chatId);
+            if (chatState) {
+              updated.set(data.chatId, {
+                ...chatState,
+                messages,
+                lastActivity: new Date(),
+              });
+            }
+            return updated;
+          });
         },
 
         user_message: (data: any) => {
@@ -152,22 +141,17 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
             timestamp: new Date(data.timestamp),
           };
 
-          const targetChatId = data.chatId || activeChatId;
-          console.log(`📤 User message for chat: ${targetChatId}`);
-
           setChats((prev) => {
             const updated = new Map(prev);
-            const chatState = updated.get(targetChatId || "");
+            const chatState = updated.get(data.chatId);
 
             if (chatState) {
               const updatedMessages = [
-                ...chatState.messages.filter(
-                  (m) => !m.messageId || m.messageId !== data.messageId
-                ),
-                message,
+                ...chatState.messages.filter((m) => !m.messageId || m.messageId !== data.messageId),
+                message
               ];
 
-              updated.set(chatState.chatId, {
+              updated.set(data.chatId, {
                 ...chatState,
                 messages: updatedMessages,
                 lastActivity: new Date(),
@@ -179,16 +163,14 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
         },
 
         assistant_message_start: (data: any) => {
-          const targetChatId = data.chatId || activeChatId;
-          console.log(`🤖 Assistant starting to type in chat: ${targetChatId}`);
-          if (!targetChatId) return;
+          if (!data.chatId) return;
 
           setChats((prev) => {
             const updated = new Map(prev);
-            const chatState = updated.get(targetChatId);
+            const chatState = updated.get(data.chatId);
 
             if (chatState) {
-              updated.set(targetChatId, {
+              updated.set(data.chatId, {
                 ...chatState,
                 isTyping: true,
                 streamingMessage: "",
@@ -201,15 +183,14 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
         },
 
         assistant_message_token: (data: any) => {
-          const targetChatId = data.chatId || activeChatId;
-          if (!targetChatId) return;
+          if (!data.chatId) return;
 
           setChats((prev) => {
             const updated = new Map(prev);
-            const chatState = updated.get(targetChatId);
+            const chatState = updated.get(data.chatId);
 
             if (chatState) {
-              updated.set(targetChatId, {
+              updated.set(data.chatId, {
                 ...chatState,
                 streamingMessage: chatState.streamingMessage + data.token,
                 lastActivity: new Date(),
@@ -221,6 +202,8 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
         },
 
         assistant_message_complete: (data: any) => {
+          if (!data.chatId) return;
+
           const message: ChatMessage = {
             messageId: data.messageId,
             content: data.content,
@@ -228,25 +211,17 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
             timestamp: new Date(data.timestamp),
           };
 
-          const targetChatId = data.chatId || activeChatId;
-          console.log(
-            `✅ Assistant message complete for chat: ${targetChatId}`
-          );
-          if (!targetChatId) return;
-
           setChats((prev) => {
             const updated = new Map(prev);
-            const chatState = updated.get(targetChatId);
+            const chatState = updated.get(data.chatId);
 
             if (chatState) {
               const updatedMessages = [
-                ...chatState.messages.filter(
-                  (m) => !m.messageId || m.messageId !== data.messageId
-                ),
-                message,
+                ...chatState.messages.filter((m) => !m.messageId || m.messageId !== data.messageId),
+                message
               ];
 
-              updated.set(targetChatId, {
+              updated.set(data.chatId, {
                 ...chatState,
                 messages: updatedMessages,
                 isTyping: false,
@@ -267,14 +242,11 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
         },
       };
 
-      // Register all handlers
       Object.entries(handlers).forEach(([type, handler]) => {
         service.onMessage(type, handler);
-        messageHandlersRef.current.set(type, handler);
       });
 
       await service.connect();
-      isInitializedRef.current = true;
     } catch (error) {
       console.error("Failed to connect to WebSocket:", error);
       setIsConnecting(false);
@@ -282,103 +254,67 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
         onError("Failed to connect to chat server");
       }
     }
-  }, [token, isConnecting, isConnected, onError, activeChatId]);
+  }, [token, isConnecting, isConnected, onError]);
 
-  // Send message to specific chat or active chat
-  const sendMessage = useCallback(
-    (message: string, chatId?: string) => {
-      const service = chatServiceRef.current;
-      const targetChatId = chatId || activeChatId;
+  const subscribeToChat = useCallback((chatId: string) => {
+    const service = chatServiceRef.current;
+    
+    if (!service?.isConnected() || !chatId) {
+      console.error("Cannot subscribe: not connected or no chatId");
+      return;
+    }
 
-      console.log(
-        `🚀 Sending message to chat: ${targetChatId}, WebSocket current chat: ${service?.getCurrentChatId()}`
-      );
+    if (subscribedChats.has(chatId) || pendingSubscriptionsRef.current.has(chatId)) {
+      return;
+    }
 
-      if (service && service.isConnected() && targetChatId) {
-        // Switch to target chat if it's not currently active on WebSocket
-        if (service.getCurrentChatId() !== targetChatId) {
-          console.log(
-            `🔄 Switching WebSocket from ${service.getCurrentChatId()} to ${targetChatId}`
-          );
-          service.switchChat(targetChatId);
-        }
-        service.sendMessage(message);
-      } else {
-        console.error("No chat available. Create or join a chat first.");
-        if (onError) {
-          onError("No active chat. Please select or create a chat first.");
-        }
-      }
-    },
-    [onError, activeChatId]
-  );
+    pendingSubscriptionsRef.current.add(chatId);
+    service.subscribeToChat(chatId);
+  }, [subscribedChats]);
 
-  // Join existing chat by ID
-  const joinChat = useCallback(
-    (chatId: string) => {
-      const service = chatServiceRef.current;
-      if (service && service.isConnected()) {
-        service.joinChat(chatId);
-      } else {
-        console.error("WebSocket not connected");
-        if (onError) {
-          onError("Not connected to chat server");
-        }
-      }
-    },
-    [onError]
-  );
-
-  // Switch between existing chats
-  const switchChat = useCallback(
-    (chatId: string) => {
-      const service = chatServiceRef.current;
-      if (service && service.isConnected()) {
-        service.switchChat(chatId);
-      } else {
-        console.error("WebSocket not connected");
-        if (onError) {
-          onError("Not connected to chat server");
-        }
-      }
-    },
-    [onError]
-  );
-
-  // Set active chat (UI level)
-  const setActiveChat = useCallback((chatId: string) => {
-    setActiveChatId(chatId);
+  const unsubscribeFromChat = useCallback((chatId: string) => {
+    const service = chatServiceRef.current;
+    
+    if (service?.isConnected() && chatId) {
+      service.unsubscribeFromChat(chatId);
+      pendingSubscriptionsRef.current.delete(chatId);
+    }
   }, []);
 
-  // Get specific chat state
-  const getChatState = useCallback(
-    (chatId: string): ChatState | undefined => {
-      return chats.get(chatId);
-    },
-    [chats]
-  );
+  const sendMessage = useCallback((message: string, chatId: string) => {
+    const service = chatServiceRef.current;
 
-  // Disconnect
+    if (service?.isConnected() && chatId && subscribedChats.has(chatId)) {
+      service.sendMessage(message, chatId);
+    } else {
+      console.error("Cannot send message: not connected or not subscribed to chat");
+      if (onError) {
+        onError("Not connected to chat or chat not subscribed");
+      }
+    }
+  }, [subscribedChats, onError]);
+
+  const getChatState = useCallback((chatId: string): ChatState | undefined => {
+    return chats.get(chatId);
+  }, [chats]);
+
   const disconnect = useCallback(() => {
     disconnectChatService();
     setIsConnected(false);
     setIsConnecting(false);
     setChats(new Map());
-    setActiveChatId(null);
-    isInitializedRef.current = false;
+    setSubscribedChats(new Set());
+    pendingSubscriptionsRef.current.clear();
   }, []);
 
-  // Auto-connect on mount when token is available
   useEffect(() => {
-    if (token && !isConnected && !isConnecting && !isInitializedRef.current) {
+    if (token && !isConnected && !isConnecting) {
       connect();
     }
   }, [token, connect, isConnected, isConnecting]);
 
-  // Handle token changes - reconnect if token changes
   useEffect(() => {
-    if (token && isInitializedRef.current) {
-      // If token changed, reconnect
+    if (token) {
       disconnect();
       setTimeout(() => {
         connect();
@@ -390,11 +326,10 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     isConnected,
     isConnecting,
     chats,
-    activeChatId,
+    subscribedChats,
+    subscribeToChat,
+    unsubscribeFromChat,
     sendMessage,
-    joinChat,
-    switchChat,
-    setActiveChat,
     getChatState,
     connect,
     disconnect,
@@ -411,35 +346,37 @@ export const useChat = (): ChatContextType => {
   return context;
 };
 
-// Hook for working with specific chat by ID
 export const useChatById = (chatId: string) => {
-  const { getChatState, sendMessage, joinChat, setActiveChat, isConnected } =
-    useChat();
+  const { getChatState, sendMessage, subscribeToChat, unsubscribeFromChat, isConnected, subscribedChats } = useChat();
 
   const chatState = chatId ? getChatState(chatId) : null;
+  const isSubscribed = chatId ? subscribedChats.has(chatId) : false;
 
-  const sendMessageToChat = useCallback(
-    (message: string) => {
-      if (chatId && isConnected) {
-        setActiveChat(chatId);
-        sendMessage(message, chatId);
-      }
-    },
-    [chatId, isConnected, setActiveChat, sendMessage]
-  );
-
-  const joinThisChat = useCallback(() => {
-    if (chatId && isConnected) {
-      setActiveChat(chatId);
-      joinChat(chatId);
+  const sendMessageToChat = useCallback((message: string) => {
+    if (chatId && isConnected && isSubscribed) {
+      sendMessage(message, chatId);
     }
-  }, [chatId, isConnected, setActiveChat, joinChat]);
+  }, [chatId, isConnected, isSubscribed, sendMessage]);
+
+  const subscribeToThisChat = useCallback(() => {
+    if (chatId && isConnected && !isSubscribed) {
+      subscribeToChat(chatId);
+    }
+  }, [chatId, isConnected, isSubscribed, subscribeToChat]);
+
+  const unsubscribeFromThisChat = useCallback(() => {
+    if (chatId && isSubscribed) {
+      unsubscribeFromChat(chatId);
+    }
+  }, [chatId, isSubscribed, unsubscribeFromChat]);
 
   return {
     chatState,
     sendMessage: sendMessageToChat,
-    joinChat: joinThisChat,
+    subscribeToChat: subscribeToThisChat,
+    unsubscribeFromChat: unsubscribeFromThisChat,
     isConnected,
+    isSubscribed,
     messages: chatState?.messages || [],
     isTyping: chatState?.isTyping || false,
     streamingMessage: chatState?.streamingMessage || "",

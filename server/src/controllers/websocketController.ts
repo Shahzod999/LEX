@@ -5,34 +5,36 @@ import jwt from "jsonwebtoken";
 import { Chat, Message } from "../models/Chat";
 import User from "../models/User";
 import { getWebSocketConfig, WebSocketConfig } from "../config/websocketConfig";
-import { wsMonitor } from "../middleware/websocketMonitoring";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// AuthenticatedWebSocket - расширяет стандартный WebSocket, добавляя пользовательские поля (userId, chatId и др.)
+// AuthenticatedWebSocket - расширяет стандартный WebSocket, добавляя пользовательские поля
 interface AuthenticatedWebSocket extends WebSocket {
   userId?: string;
-  chatId?: string;
+  subscribedChats?: Set<string>; // множественные активные чаты
   connectionId?: string;
   lastActivity?: number;
   messageCount?: number;
 }
+
 // WebSocketMessage определяет структуру сообщений между клиентом и сервером
 interface WebSocketMessage {
-  type: "message" | "join_chat" | "create_chat" | "switch_chat";
+  type: "message" | "subscribe_chat" | "unsubscribe_chat" | "create_chat" | "get_chat_history";
   data: {
     message?: string;
     chatId?: string;
     token?: string;
   };
 }
-// UserConnection - хранит информацию о соединениях пользователя
+
+// UserConnection теперь отслеживает подписки на чаты
 interface UserConnection {
   connections: Map<string, AuthenticatedWebSocket>; // connectionId -> WebSocket
   lastActivity: number;
   messageCount: number;
+  activeChats: Set<string>; // все активные чаты пользователя
 }
 
 export class ChatWebSocketServer {
@@ -57,12 +59,7 @@ export class ChatWebSocketServer {
       this.cleanupInactiveConnections();
     }, this.config.cleanupInterval);
 
-    // Обновление метрик каждые 30 секунд
-    setInterval(() => {
-      wsMonitor.updateConnectionCount(this.connectionCount, this.users.size);
-    }, 30000);
-
-    console.log("WebSocket server initialized", {
+    console.log("WebSocket server initialized with multi-chat support", {
       maxConnections: this.config.maxConnections,
       maxConnectionsPerUser: this.config.maxConnectionsPerUser,
       rateLimitMaxMessages: this.config.rateLimitMaxMessages,
@@ -175,7 +172,6 @@ export class ChatWebSocketServer {
     // Проверка лимита соединений
     if (this.connectionCount >= this.config.maxConnections) {
       ws.close(1008, "Server at capacity");
-      wsMonitor.recordError();
       return;
     }
 
@@ -185,27 +181,20 @@ export class ChatWebSocketServer {
     ws.messageCount = 0;
 
     this.connectionCount++;
-    wsMonitor.updateConnectionCount(this.connectionCount, this.users.size);
 
     console.log(
       `New WebSocket connection: ${connectionId} (Total: ${this.connectionCount})`
     );
 
     ws.on("message", async (data) => {
-      const startTime = Date.now();
-
       try {
         // Обновляем активность
         ws.lastActivity = Date.now();
 
         const message: WebSocketMessage = JSON.parse(data.toString());
         await this.handleMessage(ws, message);
-
-        wsMonitor.recordMessage();
-        wsMonitor.recordResponseTime(Date.now() - startTime);
       } catch (error) {
         console.error("Error parsing message:", error);
-        wsMonitor.recordError();
         ws.send(
           JSON.stringify({
             type: "error",
@@ -221,7 +210,6 @@ export class ChatWebSocketServer {
 
     ws.on("error", (error) => {
       console.error("WebSocket error:", error);
-      wsMonitor.recordError();
       this.handleDisconnection(ws);
     });
 
@@ -252,7 +240,6 @@ export class ChatWebSocketServer {
     }
 
     this.connectionCount--;
-    wsMonitor.updateConnectionCount(this.connectionCount, this.users.size);
 
     console.log(
       `WebSocket connection closed: ${ws.connectionId} (Total: ${this.connectionCount})`
@@ -265,14 +252,17 @@ export class ChatWebSocketServer {
     message: WebSocketMessage
   ) {
     switch (message.type) {
-      case "join_chat":
-        await this.handleJoinChat(ws, message);
+      case "subscribe_chat":
+        await this.handleSubscribeChat(ws, message);
+        break;
+      case "unsubscribe_chat":
+        await this.handleUnsubscribeChat(ws, message);
         break;
       case "create_chat":
         await this.handleCreateChat(ws, message);
         break;
-      case "switch_chat":
-        await this.handleSwitchChat(ws, message);
+      case "get_chat_history":
+        await this.handleGetChatHistory(ws, message);
         break;
       case "message":
         await this.handleChatMessage(ws, message);
@@ -287,86 +277,58 @@ export class ChatWebSocketServer {
     }
   }
 
-  // обработка соединения с чатом
-  private async handleJoinChat(
+  // обработка подписки на чат
+  private async handleSubscribeChat(
     ws: AuthenticatedWebSocket,
     message: WebSocketMessage
   ) {
-    const { token, chatId } = message.data;
+    const { chatId, token } = message.data;
 
-    if (!token) {
-      ws.send(
-        JSON.stringify({
-          type: "error",
-          data: { message: "Authentication token required" },
-        })
-      );
-      wsMonitor.recordError();
-      return;
-    }
-
-    const userId = await this.authenticateUser(token);
-    if (!userId) {
-      ws.send(
-        JSON.stringify({
-          type: "error",
-          data: { message: "Invalid authentication token" },
-        })
-      );
-      wsMonitor.recordError();
-      return;
-    }
-
-    // Проверка лимита соединений на пользователя
-    let userConnection = this.users.get(userId);
-    if (!userConnection) {
-      userConnection = {
-        connections: new Map(),
-        lastActivity: Date.now(),
-        messageCount: 0,
-      };
-      this.users.set(userId, userConnection);
-    }
-
-    if (userConnection.connections.size >= this.config.maxConnectionsPerUser) {
-      ws.close(1008, "Too many connections for user");
-      wsMonitor.recordError();
-      return;
-    }
-
-    ws.userId = userId;
-    userConnection.connections.set(ws.connectionId!, ws);
-    userConnection.lastActivity = Date.now();
-
-    if (chatId) {
-      // Проверяем доступ к чату
-      const chat = await Chat.findOne({ _id: chatId, userId }).populate(
-        "messages"
-      );
-      if (!chat) {
+    // Аутентификация, если пользователь еще не авторизован
+    if (!ws.userId) {
+      if (!token) {
         ws.send(
           JSON.stringify({
             type: "error",
-            data: { message: "Chat not found or access denied" },
+            data: { message: "Authentication token required" },
           })
         );
-        wsMonitor.recordError();
         return;
       }
 
-      ws.chatId = chatId;
+      const userId = await this.authenticateUser(token);
+      if (!userId) {
+        ws.send(
+          JSON.stringify({
+            type: "error",
+            data: { message: "Invalid authentication token" },
+          })
+        );
+        return;
+      }
 
-      ws.send(
-        JSON.stringify({
-          type: "chat_joined",
-          data: {
-            chatId,
-            messages: chat.messages,
-            title: chat.title,
-          },
-        })
-      );
-    } else {
+      // Проверка лимита соединений на пользователя
+      let userConnection = this.users.get(userId);
+      if (!userConnection) {
+        userConnection = {
+          connections: new Map(),
+          lastActivity: Date.now(),
+          messageCount: 0,
+          activeChats: new Set(),
+        };
+        this.users.set(userId, userConnection);
+      }
+
+      if (userConnection.connections.size >= this.config.maxConnectionsPerUser) {
+        ws.close(1008, "Too many connections for user");
+        return;
+      }
+
+      ws.userId = userId;
+      userConnection.connections.set(ws.connectionId!, ws);
+      userConnection.lastActivity = Date.now();
+
+      // Отправляем подтверждение аутентификации
       ws.send(
         JSON.stringify({
           type: "authenticated",
@@ -377,23 +339,57 @@ export class ChatWebSocketServer {
         })
       );
     }
-  }
 
-  // переключение между чатами
-  private async handleSwitchChat(
-    ws: AuthenticatedWebSocket,
-    message: WebSocketMessage
-  ) {
-    if (!ws.userId) {
+    if (!chatId) {
       ws.send(
         JSON.stringify({
           type: "error",
-          data: { message: "Not authenticated" },
+          data: { message: "Chat ID required" },
         })
       );
       return;
     }
 
+    // Проверяем доступ к чату
+    const chat = await Chat.findOne({ _id: chatId, userId: ws.userId }).populate(
+      "messages"
+    );
+    if (!chat) {
+      ws.send(
+        JSON.stringify({
+          type: "error",
+          data: { message: "Chat not found or access denied" },
+        })
+      );
+      return;
+    }
+
+    ws.subscribedChats = ws.subscribedChats || new Set();
+    ws.subscribedChats.add(chatId);
+
+    // Добавляем чат в активные чаты пользователя
+    const userConnection = this.users.get(ws.userId);
+    if (userConnection) {
+      userConnection.activeChats.add(chatId);
+    }
+
+    ws.send(
+      JSON.stringify({
+        type: "chat_subscribed",
+        data: {
+          chatId,
+          messages: chat.messages,
+          title: chat.title,
+        },
+      })
+    );
+  }
+
+  // обработка отписки от чата
+  private async handleUnsubscribeChat(
+    ws: AuthenticatedWebSocket,
+    message: WebSocketMessage
+  ) {
     const { chatId } = message.data;
 
     if (!chatId) {
@@ -407,10 +403,9 @@ export class ChatWebSocketServer {
     }
 
     // Проверяем доступ к чату
-    const chat = await Chat.findOne({
-      _id: chatId,
-      userId: ws.userId,
-    }).populate("messages");
+    const chat = await Chat.findOne({ _id: chatId, userId: ws.userId }).populate(
+      "messages"
+    );
     if (!chat) {
       ws.send(
         JSON.stringify({
@@ -421,11 +416,12 @@ export class ChatWebSocketServer {
       return;
     }
 
-    ws.chatId = chatId;
+    ws.subscribedChats = ws.subscribedChats || new Set();
+    ws.subscribedChats.delete(chatId);
 
     ws.send(
       JSON.stringify({
-        type: "chat_switched",
+        type: "chat_unsubscribed",
         data: {
           chatId,
           messages: chat.messages,
@@ -459,7 +455,8 @@ export class ChatWebSocketServer {
         messages: [],
       });
 
-      ws.chatId = chat._id.toString();
+      ws.subscribedChats = ws.subscribedChats || new Set();
+      ws.subscribedChats.add(chat._id.toString());
 
       ws.send(
         JSON.stringify({
@@ -481,19 +478,83 @@ export class ChatWebSocketServer {
     }
   }
 
+  // обработка получения истории чата
+  private async handleGetChatHistory(
+    ws: AuthenticatedWebSocket,
+    message: WebSocketMessage
+  ) {
+    const { chatId } = message.data;
+
+    if (!chatId) {
+      ws.send(
+        JSON.stringify({
+          type: "error",
+          data: { message: "Chat ID required" },
+        })
+      );
+      return;
+    }
+
+    // Проверяем доступ к чату
+    const chat = await Chat.findOne({ _id: chatId, userId: ws.userId }).populate(
+      "messages"
+    );
+    if (!chat) {
+      ws.send(
+        JSON.stringify({
+          type: "error",
+          data: { message: "Chat not found or access denied" },
+        })
+      );
+      return;
+    }
+
+    ws.send(
+      JSON.stringify({
+        type: "chat_history",
+        data: {
+          chatId,
+          messages: chat.messages,
+        },
+      })
+    );
+  }
+
   // обработка сообщений от пользователя
   private async handleChatMessage(
     ws: AuthenticatedWebSocket,
     message: WebSocketMessage
   ) {
-    if (!ws.userId || !ws.chatId) {
+    if (!ws.userId) {
       ws.send(
         JSON.stringify({
           type: "error",
-          data: { message: "Not authenticated or not in a chat" },
+          data: { message: "Not authenticated" },
         })
       );
-      wsMonitor.recordError();
+      return;
+    }
+
+    const { message: userMessage, chatId } = message.data;
+
+    if (!chatId) {
+      ws.send(
+        JSON.stringify({
+          type: "error",
+          data: { message: "Chat ID required" },
+        })
+      );
+      return;
+    }
+
+    // Проверяем, что пользователь подписан на этот чат
+    if (!ws.subscribedChats?.has(chatId)) {
+      ws.send(
+        JSON.stringify({
+          type: "error",
+          data: { message: "Not subscribed to this chat" },
+        })
+      );
       return;
     }
 
@@ -505,11 +566,9 @@ export class ChatWebSocketServer {
           data: { message: "Rate limit exceeded. Please slow down." },
         })
       );
-      wsMonitor.recordError();
       return;
     }
 
-    const { message: userMessage } = message.data;
     if (!userMessage || userMessage.trim().length === 0) {
       ws.send(
         JSON.stringify({
@@ -517,7 +576,6 @@ export class ChatWebSocketServer {
           data: { message: "Message content required" },
         })
       );
-      wsMonitor.recordError();
       return;
     }
 
@@ -531,15 +589,14 @@ export class ChatWebSocketServer {
           },
         })
       );
-      wsMonitor.recordError();
       return;
     }
 
     this.incrementMessageCount(ws.userId);
 
     try {
-      // Находим чат
-      const chat = await Chat.findOne({ _id: ws.chatId, userId: ws.userId });
+      // Находим конкретный чат
+      const chat = await Chat.findOne({ _id: chatId, userId: ws.userId });
       if (!chat) {
         ws.send(
           JSON.stringify({
@@ -560,26 +617,22 @@ export class ChatWebSocketServer {
       chat.updatedAt = new Date();
       await chat.save();
 
-      // Отправляем подтверждение пользователю
-      ws.send(
-        JSON.stringify({
-          type: "user_message",
-          data: {
-            chatId: ws.chatId,
-            messageId: userMessageDoc._id,
-            content: userMessage.trim(),
-            role: "user",
-            timestamp: userMessageDoc.createdAt,
-          },
-        })
-      );
+      // Отправляем подтверждение пользователю в конкретный чат
+      this.sendToChatSubscribers(ws.userId, chatId, {
+        type: "user_message",
+        data: {
+          chatId: chatId,
+          messageId: userMessageDoc._id,
+          content: userMessage.trim(),
+          role: "user",
+          timestamp: userMessageDoc.createdAt,
+        },
+      });
 
       // Получаем историю сообщений для контекста
-      const messages = await Message.find({ _id: { $in: chat.messages } }).sort(
-        {
-          createdAt: 1,
-        }
-      );
+      const messages = await Message.find({ _id: { $in: chat.messages } }).sort({
+        createdAt: 1,
+      });
 
       // Простой промпт для всех чатов
       const systemPrompt =
@@ -596,16 +649,14 @@ export class ChatWebSocketServer {
         })),
       ];
 
-      // Начинаем стриминг ответа
-      ws.send(
-        JSON.stringify({
-          type: "assistant_message_start",
-          data: {
-            chatId: ws.chatId,
-            message: "Ассистент печатает...",
-          },
-        })
-      );
+      // Начинаем стриминг ответа в конкретный чат
+      this.sendToChatSubscribers(ws.userId, chatId, {
+        type: "assistant_message_start",
+        data: {
+          chatId: chatId,
+          message: "Ассистент печатает...",
+        },
+      });
 
       let assistantMessageContent = "";
 
@@ -630,15 +681,13 @@ export class ChatWebSocketServer {
           const token = chunk.choices?.[0]?.delta?.content || "";
           if (token) {
             assistantMessageContent += token;
-            ws.send(
-              JSON.stringify({
-                type: "assistant_message_token",
-                data: {
-                  chatId: ws.chatId,
-                  token,
-                },
-              })
-            );
+            this.sendToChatSubscribers(ws.userId, chatId, {
+              type: "assistant_message_token",
+              data: {
+                chatId: chatId,
+                token,
+              },
+            });
           }
         }
 
@@ -659,24 +708,19 @@ export class ChatWebSocketServer {
 
         await chat.save();
 
-        // Отправляем завершение
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(
-            JSON.stringify({
-              type: "assistant_message_complete",
-              data: {
-                chatId: ws.chatId,
-                messageId: assistantMessageDoc._id,
-                content: assistantMessageContent,
-                role: "assistant",
-                timestamp: assistantMessageDoc.createdAt,
-              },
-            })
-          );
-        }
+        // Отправляем завершение в конкретный чат
+        this.sendToChatSubscribers(ws.userId, chatId, {
+          type: "assistant_message_complete",
+          data: {
+            chatId: chatId,
+            messageId: assistantMessageDoc._id,
+            content: assistantMessageContent,
+            role: "assistant",
+            timestamp: assistantMessageDoc.createdAt,
+          },
+        });
       } catch (openaiError) {
         console.error("OpenAI error:", openaiError);
-        wsMonitor.recordError();
 
         const errorMessage =
           "Извините, произошла ошибка при обработке вашего сообщения. Попробуйте еще раз.";
@@ -690,24 +734,19 @@ export class ChatWebSocketServer {
         chat.updatedAt = new Date();
         await chat.save();
 
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(
-            JSON.stringify({
-              type: "assistant_message_complete",
-              data: {
-                chatId: ws.chatId,
-                messageId: assistantMessageDoc._id,
-                content: errorMessage,
-                role: "assistant",
-                timestamp: assistantMessageDoc.createdAt,
-              },
-            })
-          );
-        }
+        this.sendToChatSubscribers(ws.userId, chatId, {
+          type: "assistant_message_complete",
+          data: {
+            chatId: chatId,
+            messageId: assistantMessageDoc._id,
+            content: errorMessage,
+            role: "assistant",
+            timestamp: assistantMessageDoc.createdAt,
+          },
+        });
       }
     } catch (error) {
       console.error("Error handling chat message:", error);
-      wsMonitor.recordError();
 
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(
@@ -717,6 +756,18 @@ export class ChatWebSocketServer {
           })
         );
       }
+    }
+  }
+
+  // отправка сообщения подписчикам конкретного чата
+  private sendToChatSubscribers(userId: string, chatId: string, message: any) {
+    const userConnection = this.users.get(userId);
+    if (userConnection) {
+      userConnection.connections.forEach((ws) => {
+        if (ws.readyState === WebSocket.OPEN && ws.subscribedChats?.has(chatId)) {
+          ws.send(JSON.stringify(message));
+        }
+      });
     }
   }
 
@@ -748,7 +799,7 @@ export class ChatWebSocketServer {
     const userConnection = this.users.get(userId);
     if (userConnection) {
       userConnection.connections.forEach((client) => {
-        if (client.readyState === WebSocket.OPEN && client.chatId === chatId) {
+        if (client.readyState === WebSocket.OPEN && client.subscribedChats?.has(chatId)) {
           client.send(JSON.stringify(message));
         }
       });
@@ -763,7 +814,6 @@ export class ChatWebSocketServer {
       maxConnections: this.config.maxConnections,
       maxConnectionsPerUser: this.config.maxConnectionsPerUser,
       config: this.config,
-      monitoring: wsMonitor.getMetrics(),
     };
   }
 }

@@ -16,7 +16,7 @@ import { PanGestureHandler, State } from "react-native-gesture-handler";
 import Header from "@/components/Card/Header";
 import ChatHistoryMenu from "@/components/ChatHistoryMenu";
 import { useTheme } from "@/context/ThemeContext";
-import { useChat } from "@/context/ChatContext";
+import { useChat, useChatById } from "@/context/ChatContext";
 import { useGetUserOneChatQuery } from "@/redux/api/endpoints/chatApiSlice";
 
 // Interface for UI messages that includes all possible fields
@@ -36,45 +36,28 @@ const ChatScreen = () => {
   const [chatHistoryVisible, setChatHistoryVisible] = useState(false);
   const [selectedChatId, setSelectedChatId] = useState<string>("");
 
-  const { data: currentChatData, isLoading: isLoadingChat } =
-    useGetUserOneChatQuery(selectedChatId || "", {
-      refetchOnMountOrArgChange: true,
-      // skip: !selectedChatId, // Skip query if no chat selected
-    });
+  const { data: currentChatData, isLoading: isLoadingChat } = useGetUserOneChatQuery(selectedChatId || "", {
+    refetchOnMountOrArgChange: true,
+  });
 
-  const {
-    isConnected,
-    isConnecting,
-    activeChatId,
-    sendMessage,
-    joinChat,
-    setActiveChat,
-    getChatState,
-  } = useChat();
+  const { isConnected, isConnecting } = useChat();
+  const selectedChat = useChatById(selectedChatId);
 
-  // Auto-connect to API chat data only if user hasn't manually selected a chat
   useEffect(() => {
     if (isConnected && currentChatData?._id && !selectedChatId) {
       setSelectedChatId(currentChatData._id);
-      setActiveChat(currentChatData._id);
-      joinChat(currentChatData._id);
     }
-  }, [
-    isConnected,
-    currentChatData?._id,
-    selectedChatId,
-    setActiveChat,
-    joinChat,
-  ]);
+  }, [isConnected, currentChatData?._id, selectedChatId]);
 
-  // Get the chat state for current selected chat
-  const currentChatState = selectedChatId ? getChatState(selectedChatId) : null;
+  useEffect(() => {
+    if (selectedChatId && isConnected && !selectedChat.isSubscribed) {
+      selectedChat.subscribeToChat();
+    }
+  }, [selectedChatId, isConnected, selectedChat.isSubscribed]);
 
-  // Determine which messages to show
   const getDisplayMessages = (): UIMessage[] => {
-    // If we have WebSocket chat state for selected chat, use it (real-time)
-    if (currentChatState && currentChatState.chatId === selectedChatId) {
-      return currentChatState.messages.map((msg) => ({
+    if (selectedChat.chatState && selectedChat.chatState.chatId === selectedChatId) {
+      return selectedChat.messages.map((msg) => ({
         messageId: msg.messageId,
         content: msg.content,
         role: msg.role,
@@ -82,7 +65,6 @@ const ChatScreen = () => {
       }));
     }
 
-    // Otherwise use API data if it matches selection
     if (currentChatData?.messages && currentChatData._id === selectedChatId) {
       return currentChatData.messages.map((msg) => ({
         _id: msg._id,
@@ -98,11 +80,9 @@ const ChatScreen = () => {
   const displayMessages = getDisplayMessages();
 
   const handleSendMessage = () => {
-    if (inputText.trim() === "" || !isConnected || !selectedChatId) return;
+    if (inputText.trim() === "" || !isConnected || !selectedChatId || !selectedChat.isSubscribed) return;
 
-    // Set this chat as active and send message
-    setActiveChat(selectedChatId);
-    sendMessage(inputText, selectedChatId);
+    selectedChat.sendMessage(inputText);
     setInputText("");
   };
 
@@ -122,51 +102,39 @@ const ChatScreen = () => {
   const handleSelectChat = (chatId: string) => {
     if (isConnected && chatId) {
       setSelectedChatId(chatId);
-      setActiveChat(chatId);
-      joinChat(chatId);
     }
   };
 
-  // Listen for new chat creation
-  useEffect(() => {
-    if (activeChatId && !selectedChatId) {
-      setSelectedChatId(activeChatId);
-    }
-  }, [activeChatId, selectedChatId]);
-
-  // Connection status
   const getConnectionStatus = () => {
     if (isConnecting) return "Connecting...";
     if (!isConnected) return "Disconnected";
     if (!selectedChatId) return "Ready to chat...";
+    if (!selectedChat.isSubscribed) return "Subscribing to chat...";
     return "Connected";
   };
 
   const getConnectionColor = () => {
     if (isConnecting) return "#ffaa00";
     if (!isConnected) return "#ff4444";
+    if (!selectedChat.isSubscribed) return "#ffaa00";
     return "#44ff44";
   };
 
-  // Prepare final messages for display
   const finalMessages: UIMessage[] = [...displayMessages];
 
-  // Add welcome message if no messages
   if (finalMessages.length === 0) {
     finalMessages.push({
       _id: "welcome",
-      content:
-        "Hello! I'm your AI legal companion. How can I help you today with visa or migration questions?",
+      content: "Hello! I'm your AI legal companion. How can I help you today with visa or migration questions?",
       role: "assistant",
       createdAt: new Date().toISOString(),
     });
   }
 
-  // Add streaming message if typing for this specific chat
-  if (currentChatState?.isTyping && currentChatState?.streamingMessage) {
+  if (selectedChat.isTyping && selectedChat.streamingMessage) {
     finalMessages.push({
       _id: "typing",
-      content: currentChatState.streamingMessage,
+      content: selectedChat.streamingMessage,
       role: "assistant",
       createdAt: new Date().toISOString(),
       isTyping: true,
@@ -187,15 +155,9 @@ const ChatScreen = () => {
 
             {/* Connection Status Indicator */}
             <View style={styles.statusContainer}>
-              <View
-                style={[
-                  styles.statusIndicator,
-                  { backgroundColor: getConnectionColor() },
-                ]}
-              />
-              <Text style={[styles.statusText, { color: colors.text }]}>
-                {getConnectionStatus()}
-              </Text>
+              <View style={[styles.statusIndicator, { backgroundColor: getConnectionColor() }]} />
+              <Text style={[styles.statusText, { color: colors.text }]}>{getConnectionStatus()}</Text>
+              {selectedChatId && <Text style={[styles.statusText, { color: colors.text, marginLeft: 8 }]}>• Chat: {selectedChatId.slice(-6)}</Text>}
             </View>
 
             <View style={styles.chatContainer}>
@@ -205,10 +167,8 @@ const ChatScreen = () => {
                 finalMessages.map((message, index) => (
                   <View
                     key={message._id || message.messageId || index}
-                    style={[
-                      styles.messageWrapper,
-                      message.role === "user" && styles.userMessageWrapper,
-                    ]}>
+                    style={[styles.messageWrapper, message.role === "user" && styles.userMessageWrapper]}
+                  >
                     <View
                       style={[
                         styles.messageBubble,
@@ -217,11 +177,9 @@ const ChatScreen = () => {
                           backgroundColor: colors.userAccent,
                         },
                         message.isTyping && { opacity: 0.7 },
-                      ]}>
-                      <Text
-                        style={[styles.messageText, { color: colors.text }]}>
-                        {message.content}
-                      </Text>
+                      ]}
+                    >
+                      <Text style={[styles.messageText, { color: colors.text }]}>{message.content}</Text>
                     </View>
                   </View>
                 ))
@@ -230,14 +188,8 @@ const ChatScreen = () => {
           </ScrollView>
         </PanGestureHandler>
 
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={styles.inputContainer}>
-          <View
-            style={[
-              styles.inputWrapper,
-              { backgroundColor: colors.background },
-            ]}>
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.inputContainer}>
+          <View style={[styles.inputWrapper, { backgroundColor: colors.background }]}>
             <TextInput
               style={[styles.input, { color: colors.text }]}
               placeholder="Your conversations are confidential and protected"
@@ -249,20 +201,13 @@ const ChatScreen = () => {
             <TouchableOpacity
               style={styles.sendButton}
               onPress={handleSendMessage}
-              disabled={
-                inputText.trim() === "" ||
-                !isConnected ||
-                !selectedChatId ||
-                currentChatState?.isTyping
-              }>
+              disabled={inputText.trim() === "" || !isConnected || !selectedChatId || !selectedChat.isSubscribed}
+            >
               <Ionicons
                 name="send"
                 size={20}
                 color={
-                  inputText.trim() &&
-                  isConnected &&
-                  selectedChatId &&
-                  !currentChatState?.isTyping
+                  inputText.trim() && isConnected && selectedChatId && selectedChat.isSubscribed
                     ? colors.accent
                     : colors.hint
                 }
@@ -271,11 +216,7 @@ const ChatScreen = () => {
           </View>
         </KeyboardAvoidingView>
 
-        <ChatHistoryMenu
-          visible={chatHistoryVisible}
-          onClose={() => setChatHistoryVisible(false)}
-          onSelectChat={handleSelectChat}
-        />
+        <ChatHistoryMenu visible={chatHistoryVisible} onClose={() => setChatHistoryVisible(false)} onSelectChat={handleSelectChat} />
       </SafeAreaView>
     </View>
   );

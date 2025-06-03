@@ -1,12 +1,7 @@
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import React, { useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import {
-  CameraView,
-  CameraType,
-  FlashMode,
-  useCameraPermissions,
-} from "expo-camera";
+import { CameraView, CameraType, FlashMode, useCameraPermissions } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
 
 interface CameraProps {
@@ -44,8 +39,8 @@ const CameraViewComponent: React.FC<CameraProps> = ({ onPhotoTaken }) => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        quality: 0.8,
+        allowsEditing: false,
+        quality: 1,
       });
 
       if (!result.canceled && result.assets?.[0]?.uri) {
@@ -83,12 +78,8 @@ const CameraViewComponent: React.FC<CameraProps> = ({ onPhotoTaken }) => {
     // Camera permissions are not granted yet
     return (
       <View style={styles.container}>
-        <Text style={styles.text}>
-          We need your permission to show the camera
-        </Text>
-        <TouchableOpacity
-          style={styles.permissionButton}
-          onPress={requestPermission}>
+        <Text style={styles.text}>We need your permission to show the camera</Text>
+        <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
           <Text style={styles.permissionButtonText}>Grant permission</Text>
         </TouchableOpacity>
       </View>
@@ -97,12 +88,7 @@ const CameraViewComponent: React.FC<CameraProps> = ({ onPhotoTaken }) => {
 
   return (
     <View style={styles.container}>
-      <CameraView
-        ref={cameraRef}
-        style={styles.camera}
-        facing={facing}
-        flash={flash}
-        zoom={0}>
+      <CameraView ref={cameraRef} style={styles.camera} facing={facing} flash={flash} zoom={0}>
         <View style={styles.documentFrame}>
           <View style={styles.cornerTL} />
           <View style={styles.cornerTR} />
@@ -118,33 +104,19 @@ const CameraViewComponent: React.FC<CameraProps> = ({ onPhotoTaken }) => {
 
         <View style={styles.cameraControls}>
           <TouchableOpacity style={styles.cameraButton} onPress={toggleFlash}>
-            <Ionicons
-              name={
-                flash === "off"
-                  ? "flash-off"
-                  : flash === "on"
-                  ? "flash"
-                  : "flash-outline"
-              }
-              size={24}
-              color="white"
-            />
+            <Ionicons name={flash === "off" ? "flash-off" : flash === "on" ? "flash" : "flash-outline"} size={24} color="white" />
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.captureButton} onPress={takePicture}>
             <View style={styles.captureButtonInner} />
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.cameraButton}
-            onPress={toggleCameraFacing}>
+          <TouchableOpacity style={styles.cameraButton} onPress={toggleCameraFacing}>
             <Ionicons name="camera-reverse-outline" size={24} color="white" />
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity
-          style={styles.galleryButton}
-          onPress={pickImageFromGallery}>
+        <TouchableOpacity style={styles.galleryButton} onPress={pickImageFromGallery}>
           <Ionicons name="images-outline" size={24} color="white" />
         </TouchableOpacity>
 
